@@ -1,0 +1,1353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>METAR / TAF Weather Briefing</title>
+
+<!-- Open Graph -->
+<meta property="og:type"        content="website">
+<meta property="og:url"         content="https://FranceFlapjack.github.io/metar-taf">
+<meta property="og:title"       content="METAR/TAF Weather Briefing">
+<meta property="og:description" content="Live METAR and TAF for northern Thailand aerodromes">
+<meta property="og:image"       content="https://FranceFlapjack.github.io/metar-taf/preview.png">
+
+<!-- Twitter / iMessage fallback -->
+<meta name="twitter:card"        content="summary">
+<meta name="twitter:title"       content="METAR/TAF Weather Briefing">
+<meta name="twitter:description" content="Live METAR and TAF for northern Thailand aerodromes">
+<meta name="twitter:image"       content="https://FranceFlapjack.github.io/metar-taf/preview.png">
+<style>
+/* ── Theme variables ─────────────────────────────────────────────────────── */
+:root {
+  --bg:          #ffffff;
+  --text:        #111111;
+  --border:      #e6e6e6;
+  --input-line:  #dddddd;
+  --muted:       #aaaaaa;
+  --placeholder: #cccccc;
+  --sig:         #bbbbbb;
+  --section-h:   #111111;
+  --btn-bg:      #111111;
+  --btn-fg:      #ffffff;
+  --btn-hover:   #333333;
+  --btn-off:     #cccccc;
+  --outline-border: #cccccc;
+  --outline-fg:     #111111;
+  --status-load: #999999;
+  --toggle-knob: #aaaaaa;
+  --warn:        #7a5c00;
+}
+
+[data-theme="dark"] {
+  --bg:          #111111;
+  --text:        #dddddd;
+  --border:      #232323;
+  --input-line:  #2a2a2a;
+  --muted:       #555555;
+  --placeholder: #333333;
+  --sig:         #3a3a3a;
+  --section-h:   #dddddd;
+  --btn-bg:      #dddddd;
+  --btn-fg:      #111111;
+  --btn-hover:   #bbbbbb;
+  --btn-off:     #333333;
+  --outline-border: #333333;
+  --outline-fg:     #888888;
+  --status-load: #555555;
+  --toggle-knob: #666666;
+  --warn:        #d4a800;
+}
+
+/* ── Reset ───────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  transition: background 0.2s, color 0.2s;
+}
+
+/* ── Centered column ─────────────────────────────────────────────────────── */
+.wrap { max-width: 700px; margin: 0 auto; padding: 0 48px; }
+
+/* ── Form section ────────────────────────────────────────────────────────── */
+#form-panel {
+  padding: 64px 0 52px;
+  border-bottom: 1px solid var(--border);
+}
+
+.form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+#form-panel h1 {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* ── Theme toggle (icon button) ──────────────────────────────────────────── */
+#theme-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--muted);
+  flex-shrink: 0;
+  transition: color 0.2s;
+}
+#theme-toggle:hover { color: var(--text); }
+
+/* ── Footer signature ────────────────────────────────────────────────────── */
+#page-footer {
+  text-align: center;
+  padding: 32px 0 20px;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ── Live clock ──────────────────────────────────────────────────────────── */
+#clock {
+  display: flex;
+  gap: 28px;
+  margin-bottom: 36px;
+}
+.clock-unit { display: flex; flex-direction: column; gap: 4px; }
+.clock-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.clock-time {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 14px;
+  color: var(--text);
+  letter-spacing: 0.04em;
+}
+
+/* ── Fields row ──────────────────────────────────────────────────────────── */
+.fields { display: flex; gap: 32px; align-items: flex-end; flex-wrap: wrap; }
+
+.field { display: flex; flex-direction: column; gap: 8px; }
+
+.field label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.field input {
+  border: none;
+  border-bottom: 1px solid var(--input-line);
+  padding: 6px 0;
+  font-size: 15px;
+  font-family: 'Courier New', Courier, monospace;
+  color: var(--text);
+  background: transparent;
+  outline: none;
+  transition: border-color 0.15s;
+  -webkit-appearance: none;
+}
+.field input:focus        { border-bottom-color: var(--text); }
+.field input::placeholder { color: var(--placeholder); }
+
+#f-stations       { flex: 1; min-width: 180px; }
+#f-stations input { width: 100%; }
+#f-day  input     { width: 56px; }
+#f-zulu           { position: relative; }
+#f-zulu input     { width: 68px; }
+
+.field-hint {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  padding-top: 4px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: #c00;
+  white-space: nowrap;
+}
+
+#generate-btn {
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border: none;
+  padding: 8px 22px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  align-self: flex-end;
+  transition: background 0.15s;
+  white-space: nowrap;
+  margin-bottom: 1px;
+}
+#generate-btn:hover    { background: var(--btn-hover); }
+#generate-btn:disabled { background: var(--btn-off); cursor: default; }
+
+/* ── Takeoff animation ───────────────────────────────────────────────────── */
+@keyframes plane-takeoff {
+  0%   { transform: translateX(0)     translateY(0)    rotate(-4deg);  opacity: 1; }
+  50%  { transform: translateX(35vw)  translateY(-32px) rotate(-14deg); opacity: 1; }
+  85%  { transform: translateX(80vw)  translateY(-70px) rotate(-18deg); opacity: 1; }
+  100% { transform: translateX(112vw) translateY(-90px) rotate(-18deg); opacity: 0; }
+}
+.plane-fly {
+  position: fixed;
+  font-size: 18px;
+  color: #fff;
+  mix-blend-mode: difference;
+  pointer-events: none;
+  z-index: 9999;
+  animation: plane-takeoff 2.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+/* ── Time hint & warning ─────────────────────────────────────────────────── */
+#time-hint {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding-top: 10px;
+}
+#time-warn { display: none; font-size: 12px; letter-spacing: 0.03em; }
+#time-warn.visible { display: block; padding: 6px 0 0; color: #c00; }
+
+#taf-source-note {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+/* ── Status bar ──────────────────────────────────────────────────────────── */
+#status-bar { display: none; font-size: 12px; letter-spacing: 0.03em; }
+#status-bar.loading { display: block; padding: 14px 0; color: var(--status-load); }
+#status-bar.error   { display: block; padding: 14px 0; color: #c00; }
+
+/* ── Action bar ──────────────────────────────────────────────────────────── */
+#action-bar {
+  display: none;
+  align-items: center;
+  gap: 20px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+#action-bar.visible { display: flex; }
+
+#action-bar button {
+  background: none;
+  border: 1px solid var(--outline-border);
+  color: var(--outline-fg);
+  padding: 5px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+#action-bar button:hover { border-color: var(--text); }
+
+#time-label {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-family: 'Courier New', Courier, monospace;
+}
+
+/* ── METAR / TAF content ─────────────────────────────────────────────────── */
+#content { display: none; padding: 52px 0 80px; }
+#content.visible { display: block; }
+
+#content h1 {
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--section-h);
+  margin-bottom: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  line-height: 1.8;
+  word-break: break-word;
+  color: var(--text);
+}
+.row-text { flex: 1; min-width: 0; }
+#metar-rows .row:last-child,
+#taf-rows   .row:last-child { border-bottom: 1px solid var(--border); }
+.section-gap { height: 48px; }
+
+/* ── Flight category badge ───────────────────────────────────────────────── */
+.fc-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-family: -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  color: #fff;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-top: 4px;
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.fc-lifr { background: #9b59b6; }
+.fc-ifr  { background: #e74c3c; }
+.fc-mvfr { background: #2980b9; }
+.fc-vfr  { background: #27ae60; }
+
+/* ── Flight category tooltip ─────────────────────────────────────────────── */
+#fc-tooltip {
+  position: fixed;
+  display: none;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.13);
+  font-family: -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 11px;
+  line-height: 1.65;
+  color: #222;
+  z-index: 1000;
+  max-width: 290px;
+  pointer-events: none;
+}
+[data-theme="dark"] #fc-tooltip {
+  background: #1e1e1e;
+  border-color: #333;
+  color: #ddd;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+.fc-tip-row   { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 3px; }
+.fc-dot       { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+.fc-tip-cb    { color: #cc6600; font-size: 10px; margin-top: 5px; }
+.fc-tip-note  {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid #e0e0e0;
+  font-size: 10px;
+  color: #aaa;
+}
+[data-theme="dark"] .fc-tip-note  { border-top-color: #333; }
+
+/* ── TMD colour classes ──────────────────────────────────────────────────── */
+.c-maroon  { color: #800000; }
+.c-maroon-b{ color: #800000; font-weight: bold; }
+.c-blue    { color: #0066cc; }
+.c-blue-b  { color: #0066cc; font-weight: bold; }
+.c-blue-u  { color: #0066cc; text-decoration: underline; }
+.c-green   { color: #008000; }
+.c-red     { color: #cc0000; }
+.c-red-b   { color: #cc0000; font-weight: bold; }
+.c-amber   { color: #cc8800; }
+.c-grey    { color: #999999; }
+/* legacy aliases kept for decoder */
+.tsra      { color: #800000; font-weight: bold; }
+
+/* ── Colour legend ───────────────────────────────────────────────────────── */
+#legend-toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 24px;
+  display: block;
+}
+#legend-toggle:hover { color: var(--text); }
+#colour-legend {
+  display: none;
+  margin-top: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  line-height: 2;
+}
+#colour-legend.open { display: block; }
+.legend-row { display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.legend-item { white-space: nowrap; }
+
+/* ── Decode toggle button (active state) ─────────────────────────────────── */
+#decode-btn.active {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+}
+
+/* ── Decode disclaimer ───────────────────────────────────────────────────── */
+#decode-disclaimer {
+  display: none;
+  font-size: 11px;
+  font-family: -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  color: var(--warn);
+  border: 1px solid currentColor;
+  padding: 8px 12px;
+  margin-bottom: 28px;
+  line-height: 1.6;
+  opacity: 0.85;
+}
+#content.decode-on #decode-disclaimer { display: block; }
+
+/* ── Decode block (per row) ──────────────────────────────────────────────── */
+.decode-block {
+  display: none;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  font-family: -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.8;
+}
+#content.decode-on .decode-block { display: block; }
+
+.decode-unknown {
+  color: #cc6600;
+  font-style: italic;
+}
+[data-theme="dark"] .decode-unknown { color: #ff8c00; }
+
+/* ── Print footer (screen: hidden) ──────────────────────────────────────── */
+#print-footer { display: none; }
+
+/* ── Print ───────────────────────────────────────────────────────────────── */
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+/* iPad (portrait + landscape) */
+@media (max-width: 900px) {
+  .wrap { padding: 0 36px; }
+}
+
+/* Large phone / iPad mini */
+@media (max-width: 600px) {
+  .wrap          { padding: 0 24px; }
+  #form-panel    { padding: 48px 0 40px; }
+  #content       { padding: 40px 0 64px; }
+  .fields        { gap: 24px; }
+}
+
+/* Phone (iPhone SE → iPhone Pro Max) */
+@media (max-width: 430px) {
+  .wrap          { padding: 0 20px; }
+  #form-panel    { padding: 36px 0 32px; }
+  #form-panel h1 { font-size: 19px; }
+  #content       { padding: 32px 0 52px; }
+  #clock         { gap: 20px; margin-bottom: 28px; }
+  .fields        { gap: 20px; }
+  /* Stations takes full row; day + zulu + button share next row */
+  #f-stations    { width: 100%; min-width: unset; flex: none; }
+  .section-gap   { height: 36px; }
+  /* Action bar wraps on small screens */
+  #action-bar    { flex-wrap: wrap; gap: 10px; }
+}
+
+/* ── Print ───────────────────────────────────────────────────────────────── */
+@media print {
+  #form-panel, #status-bar, #action-bar,
+  #legend-toggle, #colour-legend { display: none !important; }
+  #content { display: block !important; padding: 20px 0; }
+  .wrap { padding: 0 32px; max-width: none; }
+
+  #page-footer {
+    display: block !important;
+    margin-top: 24px;
+    padding-top: 10px;
+    text-align: center;
+    font-size: 8px;
+    color: #bbb;
+  }
+
+  #print-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-top: 28px;
+    padding-top: 10px;
+    border-top: 1px solid #ddd;
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 8px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #bbb;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- ── Form ───────────────────────────────────────────────────────────── -->
+  <div id="form-panel">
+    <div class="form-header">
+      <h1>METAR / TAF</h1>
+      <div class="header-right">
+        <button id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark">☀</button>
+      </div>
+    </div>
+
+    <div id="clock">
+      <div class="clock-unit">
+        <span class="clock-label">Local</span>
+        <span class="clock-time" id="clock-local">--:--:--</span>
+      </div>
+      <div class="clock-unit">
+        <span class="clock-label">UTC</span>
+        <span class="clock-time" id="clock-utc">--:--:--Z</span>
+      </div>
+    </div>
+
+    <div class="fields">
+      <div class="field" id="f-stations">
+        <label for="stations">Airport IDs</label>
+        <input type="text" id="stations" placeholder="VTPO VTPP VTCL VTCN VTCP">
+      </div>
+      <div class="field" id="f-day">
+        <label for="day">UTC Day</label>
+        <input type="number" id="day" min="1" max="31" placeholder="01">
+      </div>
+      <div class="field" id="f-zulu">
+        <label for="zulu">Zulu</label>
+        <input type="text" id="zulu" maxlength="4" placeholder="e.g. 0800">
+        <span id="zulu-hint" class="field-hint"></span>
+      </div>
+      <button id="generate-btn" onclick="generate()">Generate</button>
+    </div>
+    <div id="time-hint">Available: last 96 hours only</div>
+    <div id="time-warn"></div>
+    <div id="status-bar"></div>
+  </div>
+
+  <!-- ── Action bar ─────────────────────────────────────────────────────── -->
+  <div id="action-bar">
+    <button onclick="window.print()">Print / Save as PDF</button>
+    <button id="decode-btn" onclick="toggleDecode()">Decode</button>
+    <span id="time-label"></span>
+  </div>
+
+  <!-- ── METAR / TAF output ─────────────────────────────────────────────── -->
+  <div id="content">
+    <div id="decode-disclaimer">&#x26A0;&#xFE0F; Decoded for reference only — always verify against the official raw METAR/TAF. Not for operational use.</div>
+    <h1>METAR</h1>
+    <div id="metar-rows"></div>
+    <div class="section-gap"></div>
+    <h1>TAF</h1>
+    <div id="taf-source-note">TAF shown is the most recently issued. Historical TAFs are not available from this source.</div>
+    <div id="taf-rows"></div>
+
+    <div id="print-footer">
+      <span id="print-timestamp"></span>
+    </div>
+  </div>
+
+  <button id="legend-toggle" onclick="document.getElementById('colour-legend').classList.toggle('open')">Colour Index ▾</button>
+  <div id="colour-legend">
+    <div class="legend-row">
+      <span class="legend-item c-maroon">&#9632; Wind dir / speed</span>
+      <span class="legend-item c-blue">&#9632; Wind gust / low cloud</span>
+      <span class="legend-item c-blue-b">&#9632; Wind gust &ge;10kt above speed</span>
+      <span class="legend-item c-maroon">&#9632; Present / recent weather</span>
+      <span class="legend-item c-maroon">&#9632; Visibility &lt;5000m</span>
+      <span class="legend-item c-green">&#9632; Temp/dew spread &lt;5°C</span>
+      <span class="legend-item c-red">&#9632; Temp/dew spread &gt;10°C</span>
+      <span class="legend-item c-red-b">&#9632; SPECI</span>
+      <span class="legend-item c-blue-u">&#9632; TEMPO / BECMG / NOSIG / PROB</span>
+      <span class="legend-item c-amber">&#9632; Remarks (RMK+)</span>
+      <span class="legend-item c-grey">&#9632; Old data (&gt;90 min)</span>
+    </div>
+  </div>
+
+  <div id="page-footer">FRANCEPT</div>
+
+</div>
+
+<!-- ── Flight category tooltip (shared, repositioned by JS) ──────────── -->
+<div id="fc-tooltip">
+  <div class="fc-tip-row"><span class="fc-dot" style="background:#27ae60"></span><span><strong>CAVOK / VFR</strong> — Ceiling &gt;3000ft, Vis &gt;5km — Good conditions</span></div>
+  <div class="fc-tip-row"><span class="fc-dot" style="background:#2980b9"></span><span><strong>MVFR</strong> — Ceiling 1000–3000ft or Vis 3–5km — Marginal</span></div>
+  <div class="fc-tip-row"><span class="fc-dot" style="background:#e74c3c"></span><span><strong>IFR</strong> — Ceiling 500–999ft or Vis 1.5–3km — Poor</span></div>
+  <div class="fc-tip-row"><span class="fc-dot" style="background:#9b59b6"></span><span><strong>LIFR</strong> — Ceiling &lt;500ft or Vis &lt;1.5km — Very Poor</span></div>
+  <div id="fc-tip-cb" class="fc-tip-cb" style="display:none">&#x26A0;&#xFE0F; CB/TCU reported</div>
+  <div class="fc-tip-note">For reference only — verify with official source</div>
+</div>
+
+<script>
+'use strict';
+
+// ── Theme ────────────────────────────────────────────────────────────────
+(function () {
+  const saved = localStorage.getItem('theme') || 'light';
+  document.documentElement.setAttribute('data-theme', saved);
+})();
+
+function toggleTheme() {
+  const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('theme', next);
+  document.getElementById('theme-toggle').textContent = next === 'dark' ? '☾' : '☀';
+}
+function initThemeIcon() {
+  const theme = document.documentElement.getAttribute('data-theme') || 'light';
+  document.getElementById('theme-toggle').textContent = theme === 'dark' ? '☾' : '☀';
+}
+initThemeIcon();
+
+// ── Live clock ───────────────────────────────────────────────────────────
+function pad(n) { return String(n).padStart(2, '0'); }
+
+function tickClock() {
+  const now = new Date();
+  const localStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  const utcStr   = `${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}Z`;
+  document.getElementById('clock-local').textContent = localStr;
+  document.getElementById('clock-utc').textContent   = utcStr;
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+// ── Init form with current UTC date/time ─────────────────────────────────
+(function () {
+  const now = new Date();
+  document.getElementById('day').value  = String(now.getUTCDate()).padStart(2, '0');
+  document.getElementById('zulu').value = String(now.getUTCHours()).padStart(2, '0') + '00';
+})();
+
+// ── Enter key submits ────────────────────────────────────────────────────
+document.addEventListener('keydown', e => { if (e.key === 'Enter') generate(); });
+
+// ── Zulu auto-format ──────────────────────────────────────────────────────
+function formatZulu(raw) {
+  const d = raw.replace(/\D/g, '').slice(0, 4);
+  if (!d) return '';
+  if (d.length <= 2) return d.padStart(2, '0') + '00';
+  if (d.length === 3) return '0' + d;
+  return d;
+}
+
+(function () {
+  const zuluEl = document.getElementById('zulu');
+  const hintEl = document.getElementById('zulu-hint');
+
+  zuluEl.addEventListener('input', function () {
+    this.value = this.value.replace(/\D/g, '').slice(0, 4);
+    hintEl.textContent = '';
+  });
+
+  zuluEl.addEventListener('blur', function () {
+    const fmt = formatZulu(this.value.trim());
+    if (!fmt) return;
+    this.value = fmt;
+    const hr = parseInt(fmt.slice(0, 2), 10);
+    const mn = parseInt(fmt.slice(2, 4), 10);
+    hintEl.textContent = (hr > 23 || mn > 59) ? 'Enter valid time e.g. 0800' : '';
+    validateTime();
+  });
+})();
+
+// ── HTML escape ──────────────────────────────────────────────────────────
+function esc(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ── TMD colour helpers ────────────────────────────────────────────────────
+function span(cls, text) { return `<span class="${cls}">${text}</span>`; }
+
+// Colourize a wind group: DDDffGggKT  or  DDDffKT
+// Returns HTML with dir=maroon, speed=maroon, G+gust=blue (bold if gust≥speed+10)
+function colorizeWind(token) {
+  const m = token.match(/^(\d{3}|VRB)(\d{2,3})(G(\d{2,3}))?(KT|MPS|KMH)$/);
+  if (!m) return esc(token);
+  const dir = esc(m[1]), spd = esc(m[2]), gust = m[4], unit = esc(m[5]);
+  let out = span('c-maroon', dir) + span('c-maroon', spd);
+  if (gust) {
+    const gustNum = parseInt(gust, 10), spdNum = parseInt(m[2], 10);
+    const gustCls = (gustNum - spdNum >= 10) ? 'c-blue-b' : 'c-blue';
+    out += span(gustCls, 'G' + esc(gust));
+  }
+  out += esc(unit);
+  return out;
+}
+
+// Colourize temp/dew: M?dd/M?dd
+function colorizeTemp(token) {
+  const m = token.match(/^(M?)(\d{1,2})\/(M?)(\d{1,2})$/);
+  if (!m) return esc(token);
+  const t = (m[1] ? -1 : 1) * parseInt(m[2], 10);
+  const d = (m[3] ? -1 : 1) * parseInt(m[4], 10);
+  const diff = t - d;
+  const cls = diff < 5 ? 'c-green' : diff > 10 ? 'c-red' : '';
+  const s = esc(token);
+  return cls ? span(cls, s) : s;
+}
+
+// Colourize cloud group: (FEW|SCT|BKN|OVC)ddd[(CB|TCU)]
+function colorizeCloud(token) {
+  const m = token.match(/^(FEW|SCT|BKN|OVC)(\d{3})(CB|TCU)?$/);
+  if (!m) return esc(token);
+  const heightFt = parseInt(m[2], 10) * 100;
+  // below ~3300ft ≈ below 1000m (spec says below 033 hundreds)
+  const low = heightFt < 3300;
+  const s = esc(token);
+  return low ? span('c-blue', s) : s;
+}
+
+// Present/recent weather codes
+const WX_RE = /^(RE|VC)?(-|\+|VC)?(MI|BC|PR|DR|BL|SH|TS|FZ)?(DZ|RA|SN|SG|IC|PL|GR|GS|UP)?(BR|FG|FU|VA|DU|SA|HZ|PY|PO|SQ|FC|SS|DS)?$/;
+function isWeather(token) {
+  if (!token || token.length < 2) return false;
+  if (/^RE[A-Z]{2,}/.test(token)) return true;
+  // common WX codes
+  return /^(VC|-|\+)?(TSRA|TSGR|TSGS|TSSN|TSPL|FZRA|FZDZ|RASN|SNRA|SHSN|SHRA|SHGR|SHGS|BLSN|BLDU|BLSA|DRSN|DRDU|DRSA|FZFG|BCFG|MIFG|PRFG|TS|RA|SN|SG|IC|PL|GR|GS|DZ|FG|BR|HZ|FU|VA|DU|SA|PY|PO|SQ|FC|SS|DS|UP)$/.test(token);
+}
+
+// ── Main line colorizer ───────────────────────────────────────────────────
+function colorizeLine(line, inTaf) {
+  const tokens = line.trim().split(/\s+/);
+  const result = [];
+  let inRmk = false;
+  let prevWindSpd = null;
+
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    const s = esc(t);
+
+    // RMK and everything after → amber
+    if (t === 'RMK') { inRmk = true; result.push(span('c-amber', s)); continue; }
+    if (inRmk) { result.push(span('c-amber', s)); continue; }
+
+    // SPECI keyword → red bold
+    if (t === 'SPECI') { result.push(span('c-red-b', s)); continue; }
+
+    // METAR keyword → black
+    if (t === 'METAR') { result.push(s); continue; }
+
+    // Trends in METAR / change groups in TAF → blue underline
+    if (t === 'TEMPO' || t === 'BECMG' || t === 'NOSIG') {
+      result.push(span('c-blue-u', s)); continue;
+    }
+    if (/^PROB\d{2}$/.test(t)) { result.push(span('c-blue-u', s)); continue; }
+    if (t === 'FM' || t === 'AT' || t === 'TL') { result.push(span('c-blue-u', s)); continue; }
+
+    // Variable wind range: dddVddd → maroon
+    if (/^\d{3}V\d{3}$/.test(t)) { result.push(span('c-maroon', s)); continue; }
+
+    // Wind group: DDDffGggKT → split colours
+    if (/^(\d{3}|VRB)\d{2,3}(G\d{2,3})?(KT|MPS|KMH)$/.test(t)) {
+      const wm = t.match(/^(\d{3}|VRB)(\d{2,3})/);
+      if (wm) prevWindSpd = parseInt(wm[2], 10);
+      result.push(colorizeWind(t)); continue;
+    }
+
+    // Cloud groups
+    if (/^(FEW|SCT|BKN|OVC)\d{3}(CB|TCU)?$/.test(t)) {
+      result.push(colorizeCloud(t)); continue;
+    }
+    if (t === 'SKC' || t === 'NSC' || t === 'NCD' || t === 'CLR') {
+      result.push(s); continue;
+    }
+    if (t === 'CAVOK') { result.push(s); continue; }
+
+    // Visibility: 4-digit metres
+    if (/^\d{4}$/.test(t) && i > 0) {
+      const vis = parseInt(t, 10);
+      result.push(vis < 5000 ? span('c-maroon', s) : s); continue;
+    }
+    // Visibility with direction suffix e.g. 9999NDV
+    if (/^\d{4}[A-Z]{1,3}$/.test(t)) {
+      const vis = parseInt(t.slice(0, 4), 10);
+      result.push(vis < 5000 ? span('c-maroon', s) : s); continue;
+    }
+    // Statute miles visibility e.g. 1/2SM, 1SM, 10SM
+    if (/^(\d+\/\d+|\d+)SM$/.test(t)) {
+      result.push(span('c-maroon', s)); continue;
+    }
+
+    // Temperature/dew point
+    if (/^M?\d{1,2}\/M?\d{1,2}$/.test(t)) { result.push(colorizeTemp(t)); continue; }
+
+    // Present/recent weather
+    if (isWeather(t)) { result.push(span('c-maroon', s)); continue; }
+
+    // Fallback
+    result.push(s);
+  }
+  return result.join(' ');
+}
+
+// ── Old data greying (wraps an already-colorized row in grey if stale) ────
+function greyWrap(html) { return `<span class="c-grey">${html}</span>`; }
+
+// ── Extract datetime from METAR time token (DDHHmmZ) ────────────────────
+function metarDt(text, refNow) {
+  const m = text.match(/\b(\d{2})(\d{2})(\d{2})Z\b/);
+  if (!m) return null;
+  let dt = new Date(Date.UTC(refNow.getUTCFullYear(), refNow.getUTCMonth(),
+                             +m[1], +m[2], +m[3]));
+  if (dt > refNow)
+    dt = new Date(Date.UTC(refNow.getUTCFullYear(), refNow.getUTCMonth() - 1,
+                           +m[1], +m[2], +m[3]));
+  return dt;
+}
+
+// ── Parse METAR text ─────────────────────────────────────────────────────
+function parseMetarText(text, targetDt) {
+  const allMetars = {};
+  const now = new Date();
+
+  for (const rawLine of text.split('\n')) {
+    const stripped = rawLine.trim();
+    if (!stripped) continue;
+    if (/^(METAR|SPECI) /.test(stripped)) {
+      const parts = stripped.split(/\s+/);
+      if (parts.length >= 3) {
+        const icao = parts[1];
+        (allMetars[icao] = allMetars[icao] || []).push(stripped);
+      }
+    }
+  }
+
+  const metars = {};
+  for (const [icao, candidates] of Object.entries(allMetars)) {
+    if (!targetDt) {
+      metars[icao] = candidates[0];
+    } else {
+      let best = candidates[0], bestDiff = Infinity;
+      for (const c of candidates) {
+        const dt   = metarDt(c, now);
+        const diff = dt ? Math.abs(dt - targetDt) : Infinity;
+        if (diff < bestDiff) { bestDiff = diff; best = c; }
+      }
+      metars[icao] = best;
+    }
+  }
+  return metars;
+}
+
+// ── Parse TAF text — one TAF per station (API never returns historical) ────
+function parseTafText(text) {
+  const tafs = {}; // ICAO → [lines]
+  let curIcao = null;
+
+  for (const rawLine of text.split('\n')) {
+    const line     = rawLine.trimEnd();
+    const stripped = line.trim();
+    if (!stripped) continue;
+
+    if (/^TAF /.test(stripped)) {
+      const parts   = stripped.split(/\s+/);
+      const icaoIdx = (parts.length > 2 && (parts[1] === 'AMD' || parts[1] === 'COR')) ? 2 : 1;
+      if (parts.length > icaoIdx) {
+        curIcao       = parts[icaoIdx];
+        tafs[curIcao] = [stripped];
+      }
+    } else if (curIcao) {
+      if (/^[ \t]/.test(line) || /^(TEMPO|BECMG|PROB|FM|RMK)/.test(stripped))
+        tafs[curIcao].push(stripped);
+      else
+        curIcao = null;
+    }
+  }
+  return tafs;
+}
+
+// ── UI helpers ───────────────────────────────────────────────────────────
+const statusBar  = document.getElementById('status-bar');
+const actionBar  = document.getElementById('action-bar');
+const contentEl  = document.getElementById('content');
+const btn        = document.getElementById('generate-btn');
+
+function setStatus(cls, msg) {
+  statusBar.className   = cls;
+  statusBar.textContent = msg;
+}
+function hideStatus() { statusBar.className = ''; }
+function showError(msg) { setStatus('error', msg); }
+
+function showResult(timeLabel) {
+  hideStatus();
+  document.getElementById('time-label').textContent = timeLabel;
+  actionBar.className = 'visible';
+  contentEl.classList.add('visible');
+  const now = new Date();
+  document.getElementById('print-timestamp').textContent =
+    `Printed ${now.getUTCFullYear()}-${pad(now.getUTCMonth()+1)}-${pad(now.getUTCDate())} ` +
+    `${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}Z`;
+}
+function hideResult() {
+  actionBar.className = '';
+  contentEl.classList.remove('visible');
+}
+
+// ── Real-time 96-hour limit validation ────────────────────────────────────
+function validateTime() {
+  const dayStr  = document.getElementById('day').value.trim();
+  const zuluRaw = document.getElementById('zulu').value.trim();
+  const zuluStr = zuluRaw.padStart(4, '0');
+  const warnEl  = document.getElementById('time-warn');
+
+  const day = parseInt(dayStr, 10);
+  const hr  = parseInt(zuluStr.slice(0, 2), 10);
+  const mn  = parseInt(zuluStr.slice(2, 4), 10);
+
+  if (!dayStr || isNaN(day) || !/^\d{4}$/.test(zuluStr) || hr > 23 || mn > 59) {
+    warnEl.className = '';
+    btn.disabled = false;
+    return;
+  }
+
+  const now = new Date();
+  let targetDt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), day, hr, mn));
+  if (targetDt > now)
+    targetDt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, day, hr, mn));
+
+  const hoursBack = (now - targetDt) / 3_600_000;
+  if (hoursBack > 94) {
+    const earliest = new Date(now.getTime() - 94 * 3_600_000);
+    const dateStr  = `${earliest.getUTCFullYear()}-${pad(earliest.getUTCMonth()+1)}-${pad(earliest.getUTCDate())}`;
+    const timeStr  = `${pad(earliest.getUTCHours())}${pad(earliest.getUTCMinutes())}`;
+    warnEl.textContent = `Data only available for the last 96 hours. Earliest available: ${dateStr} ${timeStr}Z`;
+    warnEl.className = 'visible';
+    btn.disabled = true;
+  } else {
+    warnEl.className = '';
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('day').addEventListener('input', validateTime);
+document.getElementById('zulu').addEventListener('input', validateTime);
+
+// ── Proxy fetch helper ────────────────────────────────────────────────────
+const PROXIES = [
+  { prefix: 'https://corsproxy.io/?',                   encode: false },
+  { prefix: 'https://api.allorigins.win/raw?url=',      encode: true  },
+  { prefix: 'https://thingproxy.freeboard.io/fetch/',   encode: false },
+];
+
+async function fetchViaProxy(apiUrl) {
+  for (const proxy of PROXIES) {
+    const url = proxy.prefix + (proxy.encode ? encodeURIComponent(apiUrl) : apiUrl);
+    try {
+      const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
+      if (resp.status === 403 || resp.status === 429) continue;
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return await resp.text();
+    } catch (_) {}
+  }
+  return null;
+}
+
+// ── Flight category ───────────────────────────────────────────────────────
+function ceilingCat(ft) {
+  if (ft === null)  return 'VFR';
+  if (ft < 500)     return 'LIFR';
+  if (ft < 1000)    return 'IFR';
+  if (ft <= 3000)   return 'MVFR';
+  return 'VFR';
+}
+function visCat(m) {
+  if (m === null || m >= 9999) return 'VFR';
+  if (m < 1500)  return 'LIFR';
+  if (m < 3000)  return 'IFR';
+  if (m <= 5000) return 'MVFR';
+  return 'VFR';
+}
+const FC_RANK  = { LIFR: 0, IFR: 1, MVFR: 2, VFR: 3 };
+const FC_CLASS = { LIFR: 'fc-lifr', IFR: 'fc-ifr', MVFR: 'fc-mvfr', VFR: 'fc-vfr', CAVOK: 'fc-vfr' };
+
+function classifyFlight(line) {
+  const tokens = line.trim().split(/\s+/);
+  if (tokens.includes('CAVOK')) return { category: 'CAVOK', hasCB: false };
+
+  let visM = null, ceilingFt = null, hasCB = false;
+  for (const t of tokens) {
+    if (visM === null && /^\d{4}$/.test(t)) visM = parseInt(t, 10);
+    const cm = t.match(/^(BKN|OVC)(\d{3})(CB|TCU)?$/);
+    if (cm) {
+      const ft = parseInt(cm[2], 10) * 100;
+      if (ceilingFt === null || ft < ceilingFt) ceilingFt = ft;
+    }
+    if (/^(FEW|SCT|BKN|OVC)\d{3}(CB|TCU)$/.test(t)) hasCB = true;
+  }
+
+  const cc = ceilingCat(ceilingFt), vc = visCat(visM);
+  const category = FC_RANK[cc] <= FC_RANK[vc] ? cc : vc;
+  return { category, hasCB };
+}
+
+function buildFcBadge(metarLine) {
+  if (!metarLine) return '';
+  const { category, hasCB } = classifyFlight(metarLine);
+  return `<span class="fc-badge ${FC_CLASS[category]}" data-has-cb="${hasCB ? '1' : '0'}">${category}</span>`;
+}
+
+// ── Flight category tooltip ───────────────────────────────────────────────
+let fcHideTimer = null;
+const fcTip = document.getElementById('fc-tooltip');
+
+function showFcTooltip(badge) {
+  clearTimeout(fcHideTimer);
+  document.getElementById('fc-tip-cb').style.display =
+    badge.dataset.hasCb === '1' ? 'block' : 'none';
+
+  fcTip.style.left = '-9999px';
+  fcTip.style.top  = '-9999px';
+  fcTip.style.display = 'block';
+
+  const r = badge.getBoundingClientRect();
+  const w = fcTip.offsetWidth, h = fcTip.offsetHeight;
+  let top  = r.bottom + 8;
+  let left = r.left;
+  if (left + w > window.innerWidth  - 8) left = window.innerWidth  - w - 8;
+  if (top  + h > window.innerHeight - 8) top  = r.top - h - 8;
+  if (top < 8) top = 8;
+  fcTip.style.left = left + 'px';
+  fcTip.style.top  = top  + 'px';
+}
+function scheduleFcHide() {
+  fcHideTimer = setTimeout(() => { fcTip.style.display = 'none'; }, 120);
+}
+
+fcTip.addEventListener('mouseenter', () => clearTimeout(fcHideTimer));
+fcTip.addEventListener('mouseleave', scheduleFcHide);
+
+// Global tap-to-dismiss on mobile
+document.addEventListener('touchstart', () => { fcTip.style.display = 'none'; }, { passive: true });
+
+// ── Decoder ──────────────────────────────────────────────────────────────
+const SKIP    = Symbol('skip');
+const UNKNOWN = Symbol('unknown');
+
+const WX = {
+  'RA':    'Rain',              '-RA':   'Light rain',           '+RA':   'Heavy rain',
+  'DZ':    'Drizzle',           '-DZ':   'Light drizzle',        '+DZ':   'Heavy drizzle',
+  'SN':    'Snow',              '-SN':   'Light snow',           '+SN':   'Heavy snow',
+  'SG':    'Snow grains',       'IC':    'Ice crystals',         'PL':    'Ice pellets',
+  'GR':    'Hail',              'GS':    'Small hail',           'UP':    'Unknown precipitation',
+  'BR':    'Mist',              'FG':    'Fog',                  'FU':    'Smoke',
+  'VA':    'Volcanic ash',      'DU':    'Dust',                 'SA':    'Sand',
+  'HZ':    'Haze',              'PY':    'Spray',
+  'PO':    'Dust/sand whirls',  'SQ':    'Squall',
+  'FC':    'Funnel cloud/tornado','SS':  'Sandstorm',            'DS':    'Duststorm',
+  'TS':    'Thunderstorm',
+  'TSRA':  'Thunderstorm with rain',
+  '-TSRA': 'Light thunderstorm with rain',
+  '+TSRA': 'Heavy thunderstorm with rain',
+  'TSSN':  'Thunderstorm with snow',       'TSGR': 'Thunderstorm with hail',
+  'TSGS':  'Thunderstorm with small hail', 'TSPL': 'Thunderstorm with ice pellets',
+  'SHRA':  'Rain shower',    '-SHRA': 'Light rain shower',   '+SHRA': 'Heavy rain shower',
+  'SHSN':  'Snow shower',    '-SHSN': 'Light snow shower',   'SHGR':  'Hail shower',
+  'FZRA':  'Freezing rain',  'FZDZ':  'Freezing drizzle',    'FZFG':  'Freezing fog',
+  'BLSN':  'Blowing snow',   'BLDU':  'Blowing dust',        'BLSA':  'Blowing sand',
+  'DRSN':  'Low drifting snow','DRDU': 'Low drifting dust',   'DRSA':  'Low drifting sand',
+  'NSW':   'No significant weather',
+  'VCTS':  'Thunderstorm in vicinity',  'VCSH':   'Shower in vicinity',
+  'VCFG':  'Fog in vicinity',           'VCBLSN': 'Blowing snow in vicinity',
+  'VCPO':  'Dust whirls in vicinity',   'VCSS':   'Sandstorm in vicinity',
+};
+
+function decodeToken(token) {
+  if (!token) return SKIP;
+
+  // Report type
+  if (token === 'METAR') return 'Routine observation';
+  if (token === 'SPECI') return 'Special observation';
+  if (token === 'TAF')   return 'Terminal aerodrome forecast';
+  if (token === 'AMD')   return 'Amendment';
+  if (token === 'COR')   return 'Correction';
+  if (token === 'AUTO')  return 'Automated — no human observer';
+  if (token === 'NIL')   return 'Report not available';
+
+  // 4-letter ICAO station ID — already obvious in raw
+  if (/^[A-Z]{4}$/.test(token)) return SKIP;
+
+  // Observation time DDHHmmZ
+  if (/^\d{6}Z$/.test(token))
+    return `Day ${token.slice(0,2)}, ${token.slice(2,4)}:${token.slice(4,6)}Z`;
+
+  // TAF validity DDHH/DDHH
+  if (/^\d{4}\/\d{4}$/.test(token))
+    return `Valid day ${token.slice(0,2)} ${token.slice(2,4)}:00Z to day ${token.slice(5,7)} ${token.slice(7,9)}:00Z`;
+
+  // Special flags
+  if (token === 'CAVOK')  return 'Ceiling & Visibility OK — vis ≥10km, no cloud below 5000ft, no significant weather';
+  if (token === 'NSC')    return 'No significant cloud';
+  if (token === 'NCD')    return 'No cloud detected (automated)';
+  if (token === 'SKC')    return 'Sky clear';
+  if (token === 'CLR')    return 'Sky clear below 12,000ft';
+  if (token === 'NOSIG')  return 'No significant change expected';
+  if (token === 'NSW')    return 'No significant weather';
+  if (token === 'RMK')    return SKIP; // remarks section — skip remaining tokens
+
+  // TAF change groups
+  if (token === 'BECMG')  return 'Becoming (permanent change)';
+  if (token === 'TEMPO')  return 'Temporarily (each occurrence <1hr, total <½ of period)';
+  const probM = token.match(/^PROB(\d{2})$/);
+  if (probM)              return `${probM[1]}% probability`;
+  const fmM = token.match(/^FM(\d{2})(\d{2})(\d{2})$/);
+  if (fmM)                return `From day ${fmM[1]} ${fmM[2]}:${fmM[3]}Z`;
+  const tlM = token.match(/^TL(\d{2})(\d{2})$/);
+  if (tlM)                return `Until ${tlM[1]}:${tlM[2]}Z`;
+  const atM = token.match(/^AT(\d{2})(\d{2})$/);
+  if (atM)                return `At ${atM[1]}:${atM[2]}Z`;
+
+  // Wind: VRB05KT / 27010G18KT / 00000KT
+  const windM = token.match(/^(VRB|\d{3})(\d{2,3})(G(\d{2,3}))?(KT|MPS|KMH)$/);
+  if (windM) {
+    if (windM[1] === '000' && parseInt(windM[2]) === 0) return 'Wind calm';
+    const dir  = windM[1] === 'VRB' ? 'variable direction' : `${windM[1]}°`;
+    const spd  = `${parseInt(windM[2])}${windM[5]}`;
+    const gust = windM[4] ? `, gusting ${parseInt(windM[4])}${windM[5]}` : '';
+    return `Wind from ${dir} at ${spd}${gust}`;
+  }
+
+  // Wind variation dddVddd
+  if (/^\d{3}V\d{3}$/.test(token))
+    return `Wind variable between ${token.slice(0,3)}° and ${token.slice(4,7)}°`;
+
+  // Visibility (metric, 4-digit metres)
+  if (/^\d{4}$/.test(token)) {
+    const v = parseInt(token, 10);
+    return v >= 9999 ? 'Visibility 10km or more' : `Visibility ${v >= 1000 ? (v/1000).toFixed(1)+'km' : v+'m'}`;
+  }
+
+  // Vertical visibility VVhhh (hundreds of feet)
+  if (/^VV\d{3}$/.test(token)) {
+    const ft = parseInt(token.slice(2)) * 100;
+    return `Sky obscured, vertical visibility ${ft.toLocaleString()}ft`;
+  }
+
+  // Cloud
+  const cloudM = token.match(/^(FEW|SCT|BKN|OVC)(\d{3})(CB|TCU)?$/);
+  if (cloudM) {
+    const amt  = { FEW:'Few (1–2 oktas)', SCT:'Scattered (3–4 oktas)', BKN:'Broken (5–7 oktas)', OVC:'Overcast (8 oktas)' };
+    const ft   = parseInt(cloudM[2]) * 100;
+    const type = cloudM[3] === 'CB' ? ', cumulonimbus' : cloudM[3] === 'TCU' ? ', towering cumulus' : '';
+    return `${amt[cloudM[1]]} at ${ft.toLocaleString()}ft${type}`;
+  }
+
+  // Temperature / dewpoint M?dd/M?dd
+  if (/^M?\d{2}\/M?\d{2}$/.test(token)) {
+    const [tRaw, tdRaw] = token.split('/');
+    const t  = tRaw.startsWith('M')  ? '−'+tRaw.slice(1)  : tRaw;
+    const td = tdRaw.startsWith('M') ? '−'+tdRaw.slice(1) : tdRaw;
+    return `Temperature ${t}°C, dewpoint ${td}°C`;
+  }
+
+  // Altimeter
+  if (/^Q\d{4}$/.test(token)) return `QNH ${token.slice(1)} hPa`;
+  if (/^A\d{4}$/.test(token)) return `Altimeter ${(parseInt(token.slice(1))/100).toFixed(2)} inHg`;
+
+  // Present weather (lookup table — only decode what we know)
+  if (Object.prototype.hasOwnProperty.call(WX, token)) return WX[token];
+
+  return UNKNOWN;
+}
+
+function decodeLine(line) {
+  const items = [];
+  let skipRest = false;
+  for (const token of line.trim().split(/\s+/)) {
+    if (skipRest) break;
+    const result = decodeToken(token);
+    if (result === SKIP) continue;
+    if (result === UNKNOWN)
+      items.push({ raw: token, text: 'Unknown code — check original', unknown: true });
+    else
+      items.push({ raw: token, text: result, unknown: false });
+    if (token === 'RMK') skipRest = true;
+  }
+  return items;
+}
+
+function buildDecodeHtml(lines) {
+  return lines.map(line => {
+    const items = decodeLine(line);
+    if (!items.length) return '';
+    return items.map(item =>
+      item.unknown
+        ? `<span class="decode-unknown">${esc(item.raw)} — Unknown code — check original</span>`
+        : esc(item.text)
+    ).join(' · ');
+  }).filter(Boolean).join('<br>');
+}
+
+// ── Decode toggle ─────────────────────────────────────────────────────────
+let decodeMode = false;
+function toggleDecode() {
+  decodeMode = !decodeMode;
+  contentEl.classList.toggle('decode-on', decodeMode);
+  document.getElementById('decode-btn').classList.toggle('active', decodeMode);
+}
+
+// ── Main ─────────────────────────────────────────────────────────────────
+function launchPlane() {
+  const btn = document.getElementById('generate-btn');
+  const r = btn.getBoundingClientRect();
+  const plane = document.createElement('span');
+  plane.className = 'plane-fly';
+  plane.textContent = '✈';
+  plane.style.left = (r.right - 4) + 'px';
+  plane.style.top  = (r.top + r.height / 2 - 9) + 'px';
+  document.body.appendChild(plane);
+  plane.addEventListener('animationend', () => plane.remove());
+}
+
+async function generate() {
+  launchPlane();
+  // ── Read inputs ───────────────────────────────────────────────────────
+  const stationsRaw = document.getElementById('stations').value.trim();
+  const dayStr      = document.getElementById('day').value.trim();
+  const zuluEl      = document.getElementById('zulu');
+  const zuluStr     = formatZulu(zuluEl.value.trim());
+  if (zuluStr) zuluEl.value = zuluStr;
+
+  // ── Validate ──────────────────────────────────────────────────────────
+  const day = parseInt(dayStr, 10);
+  if (!dayStr || isNaN(day) || day < 1 || day > 31)
+    return showError('UTC Day must be between 01 and 31.');
+  if (!/^\d{4}$/.test(zuluStr))
+    return showError('Zulu time must be 4 digits, e.g. 0300.');
+  const hr = parseInt(zuluStr.slice(0, 2), 10);
+  const mn = parseInt(zuluStr.slice(2, 4), 10);
+  if (hr > 23 || mn > 59)
+    return showError('Invalid Zulu time — hours 00–23, minutes 00–59.');
+
+  // ── Compute target datetime and hours-back ────────────────────────────
+  const now = new Date();
+  let targetDt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), day, hr, mn));
+  if (targetDt > now)
+    targetDt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, day, hr, mn));
+
+  const hoursBack = Math.ceil((now - targetDt) / 3_600_000) + 2;
+  if (hoursBack > 96)
+    return showError('Requested time is more than 94 hours ago (API limit is 96 h).');
+
+  const stationList = stationsRaw.split(/[\s,]+/).map(s => s.toUpperCase()).filter(Boolean);
+  if (!stationList.length) return showError('Enter at least one airport ICAO code.');
+  const ids         = stationList.join(',');
+
+  // ── Fetch ─────────────────────────────────────────────────────────────
+  btn.disabled = true;
+  hideResult();
+  setStatus('loading', 'Fetching data from aviationweather.gov…');
+
+  const metarUrl = `https://aviationweather.gov/api/data/metar` +
+                   `?ids=${encodeURIComponent(ids)}&hours=${hoursBack}&sep=true&format=raw`;
+  const tafUrl   = `https://aviationweather.gov/api/data/taf` +
+                   `?ids=${encodeURIComponent(ids)}&hours=${hoursBack}&format=raw`;
+
+  const [metarRaw, tafRaw] = await Promise.all([
+    fetchViaProxy(metarUrl),
+    fetchViaProxy(tafUrl),
+  ]);
+
+  btn.disabled = false;
+  if (metarRaw === null && tafRaw === null) {
+    showError('Could not fetch data — all proxies failed.');
+    return;
+  }
+
+  // ── Parse & render ────────────────────────────────────────────────────
+  const metars = metarRaw ? parseMetarText(metarRaw, targetDt) : {};
+  const tafs   = tafRaw   ? parseTafText(tafRaw)               : {};
+
+  const metarRows = document.getElementById('metar-rows');
+  const tafRows   = document.getElementById('taf-rows');
+  metarRows.innerHTML = '';
+  tafRows.innerHTML   = '';
+
+  for (const icao of stationList) {
+    const mDiv = document.createElement('div');
+    mDiv.className = 'row';
+    if (metars[icao]) {
+      let rawHtml = colorizeLine(metars[icao], false);
+      const mDt = metarDt(metars[icao], targetDt);
+      if (mDt && (targetDt - mDt) > 90 * 60 * 1000) rawHtml = greyWrap(rawHtml);
+      const decHtml = buildDecodeHtml([metars[icao]]);
+      mDiv.innerHTML = `<div class="row-text">${rawHtml}<div class="decode-block">${decHtml}</div></div>` + buildFcBadge(metars[icao]);
+      const badge = mDiv.querySelector('.fc-badge');
+      if (badge) {
+        badge.addEventListener('mouseenter', () => showFcTooltip(badge));
+        badge.addEventListener('mouseleave', scheduleFcHide);
+        badge.addEventListener('touchstart', e => { e.stopPropagation(); showFcTooltip(badge); }, { passive: true });
+      }
+    } else {
+      mDiv.innerHTML = `<div class="row-text">No data available for ${esc(icao)}</div>`;
+    }
+    metarRows.appendChild(mDiv);
+
+    const tDiv = document.createElement('div');
+    tDiv.className = 'row';
+    const tafLines = tafs[icao];
+    if (tafLines) {
+      const rawHtml = tafLines.map(l => colorizeLine(l, true)).join('<br>');
+      const decHtml = buildDecodeHtml(tafLines);
+      tDiv.innerHTML = `<div class="row-text">${rawHtml}<div class="decode-block">${decHtml}</div></div>`;
+    } else {
+      tDiv.innerHTML = `<div class="row-text">No data available for ${esc(icao)}</div>`;
+    }
+    tafRows.appendChild(tDiv);
+  }
+
+  // Obs time from first available METAR
+  let obsTime = zuluStr + 'Z';
+  for (const icao of stationList) {
+    const m = metars[icao] && metars[icao].match(/\b\d{2}(\d{4})Z\b/);
+    if (m) { obsTime = m[1] + 'Z'; break; }
+  }
+
+  showResult(
+    `Requested ${String(day).padStart(2,'0')} ${zuluStr}Z  —  obs ${obsTime}`
+  );
+}
+</script>
+</body>
+</html>
