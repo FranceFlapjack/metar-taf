@@ -552,6 +552,34 @@ body {
   .time-group { break-inside: avoid; }
   .time-group-header { break-after: avoid; }
 }
+
+/* ── SPECI label ─────────────────────────────────────────────────────────── */
+.speci-label { color: #cc0000; font-weight: bold; margin-right: 3px; }
+
+/* ── SIGMET section ──────────────────────────────────────────────────────── */
+#sigmet-section {
+  margin-bottom: 28px;
+  padding: 10px 14px;
+  border: 1px solid #cc0000;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  display: none;
+}
+#sigmet-section.visible { display: block; }
+.sigmet-active { color: #cc0000; font-weight: bold; display: block; margin-bottom: 6px; }
+.sigmet-line   { display: block; font-size: 12px; word-break: break-all; margin-bottom: 2px; }
+.sigmet-sep    { display: block; height: 6px; }
+.sigmet-none   { color: #999; font-size: 11px; font-family: -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+
+/* ── Data source note ────────────────────────────────────────────────────── */
+#data-source-note {
+  font-size: 10px;
+  color: var(--muted);
+  margin-bottom: 20px;
+  font-family: -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  letter-spacing: 0.04em;
+}
 </style>
 </head>
 <body>
@@ -611,6 +639,8 @@ body {
   <!-- ── METAR / TAF output ─────────────────────────────────────────────── -->
   <div id="content">
     <div id="decode-disclaimer">&#x26A0;&#xFE0F; Decoded for reference only — always verify against the official raw METAR/TAF. Not for operational use.</div>
+    <div id="data-source-note">Showing METAR, SPECI, and TAF — SIGMET checked separately</div>
+    <div id="sigmet-section"></div>
     <h1>METAR</h1>
     <div id="metar-rows"></div>
     <div class="section-gap"></div>
@@ -815,6 +845,7 @@ function colorizeLine(line, inTaf) {
   const result = [];
   let inRmk = false;
   let prevWindSpd = null;
+  let wsTokensLeft = 0;
 
   for (let i = 0; i < tokens.length; i++) {
     const t = tokens[i];
@@ -829,6 +860,13 @@ function colorizeLine(line, inTaf) {
 
     // METAR keyword → black
     if (t === 'METAR') { result.push(s); continue; }
+
+    // Wind shear group: WS Rnn/ddddU  or  WS ALL RWY → red bold + ⚠️
+    if (t === 'WS') {
+      wsTokensLeft = /^R\d/.test(tokens[i + 1] || '') ? 1 : 2;
+      result.push(span('c-red-b', '⚠️ ' + s)); continue;
+    }
+    if (wsTokensLeft > 0) { wsTokensLeft--; result.push(span('c-red-b', s)); continue; }
 
     // Trends in METAR / change groups in TAF → blue underline
     if (t === 'TEMPO' || t === 'BECMG' || t === 'NOSIG') {
@@ -869,6 +907,18 @@ function colorizeLine(line, inTaf) {
     // Statute miles visibility e.g. 1/2SM, 1SM, 10SM
     if (/^(\d+\/\d+|\d+)SM$/.test(t)) {
       result.push(span('c-maroon', s)); continue;
+    }
+
+    // RVR: R{rwy}[LCR]/{vis}[V{vis}][DUN] → red (critical runway visual range info)
+    if (/^R\d{2}[LCR]?\/(P|M)?\d{4}(V(P|M)?\d{4})?[DUN]?$/.test(t)) {
+      result.push(span('c-red', s)); continue;
+    }
+
+    // QNH: Q{hPa} — alert if below 1000 hPa (very low for Thailand)
+    if (/^Q\d{4}$/.test(t)) {
+      const qnh = parseInt(t.slice(1), 10);
+      result.push(qnh < 1000 ? span('c-red-b', '⚠️ ' + s) : s);
+      continue;
     }
 
     // Temperature/dew point
@@ -1245,8 +1295,26 @@ function decodeToken(token) {
     return `Temperature ${t}°C, dewpoint ${td}°C`;
   }
 
+  // Wind shear
+  if (token === 'WS') return '⚠️ Wind shear warning';
+
+  // RVR: R{rwy}{side}/{[P|M]vis}[V{[P|M]vis}][trend]
+  const rvrM = token.match(/^R(\d{2})([LCR]?)\/(P|M)?(\d{4})(?:V(P|M)?(\d{4}))?([DUN]?)$/);
+  if (rvrM) {
+    const rwy   = rvrM[1] + (rvrM[2] || '');
+    const mod1  = rvrM[3] === 'P' ? 'more than ' : rvrM[3] === 'M' ? 'less than ' : '';
+    const v1    = parseInt(rvrM[4], 10);
+    const v2    = rvrM[6] ? parseInt(rvrM[6], 10) : null;
+    const trend = { D: 'decreasing', U: 'increasing', N: 'no change' }[rvrM[7]] || '';
+    const vis   = v2 ? `varying ${v1}m to ${v2}m` : `${mod1}${v1}m`;
+    return `Runway ${rwy} visual range: ${vis}${trend ? ', ' + trend : ''}`;
+  }
+
   // Altimeter
-  if (/^Q\d{4}$/.test(token)) return `QNH ${token.slice(1)} hPa`;
+  if (/^Q\d{4}$/.test(token)) {
+    const qnh = parseInt(token.slice(1), 10);
+    return `QNH ${qnh} hPa${qnh < 1000 ? ' — ⚠️ very low pressure' : ''}`;
+  }
   if (/^A\d{4}$/.test(token)) return `Altimeter ${(parseInt(token.slice(1))/100).toFixed(2)} inHg`;
 
   // Present weather (lookup table — only decode what we know)
@@ -1331,6 +1399,108 @@ function attachBadge(container) {
   badge.addEventListener('touchstart', e => { e.stopPropagation(); showFcTooltip(badge); }, { passive: true });
 }
 
+// ── SIGMET fetch & render ─────────────────────────────────────────────────
+async function fetchSigmet() {
+  const sigmetUrls = [
+    'https://aviationweather.gov/api/data/sigmet?format=raw&hazard=CONVECTIVE',
+    'https://aviationweather.gov/api/data/sigmet?format=raw',
+  ];
+  const inner = async () => {
+    const results = await Promise.allSettled(sigmetUrls.map(u => fetchViaProxy(u)));
+    const seen = new Set(), thailand = [];
+    for (const r of results) {
+      if (r.status !== 'fulfilled' || !r.value) continue;
+      // Split on blank lines or lines starting at column 0 after a '=' terminator
+      const blocks = r.value.split(/\n\s*\n/);
+      for (const block of blocks) {
+        const trimmed = block.trim();
+        if (!trimmed || seen.has(trimmed)) continue;
+        if (/\b(VTCC|VTBD)\b/.test(trimmed)) { seen.add(trimmed); thailand.push(trimmed); }
+      }
+    }
+    return thailand;
+  };
+  try {
+    return await Promise.race([inner(), new Promise(r => setTimeout(() => r([]), 9000))]);
+  } catch (_) { return []; }
+}
+
+function renderSigmet(sigmetLines) {
+  const el = document.getElementById('sigmet-section');
+  el.classList.add('visible');
+  if (!sigmetLines || !sigmetLines.length) {
+    el.innerHTML = '<span class="sigmet-none">No active SIGMET for VTCC FIR</span>';
+    return;
+  }
+  let html = '<span class="sigmet-active">[SIGMET ACTIVE ⚠️]</span>';
+  for (const block of sigmetLines) {
+    for (const line of block.split('\n')) {
+      const t = line.trim();
+      if (t) html += `<span class="sigmet-line">${esc(t)}</span>`;
+    }
+    html += '<span class="sigmet-sep"></span>';
+  }
+  el.innerHTML = html;
+}
+
+// ── Report selection helpers (METAR + SPECI) ──────────────────────────────
+function getReportsForSingle(candidates, targetDt) {
+  const now    = new Date();
+  const WINDOW = 90 * 60 * 1000;
+
+  // Best regular METAR (closest to targetDt)
+  let bestMetar = null, bestDiff = Infinity, bestDt = null;
+  for (const c of candidates) {
+    if (!c.startsWith('METAR ')) continue;
+    const dt   = metarDt(c, now);
+    const diff = dt ? Math.abs(dt - targetDt) : Infinity;
+    if (diff < bestDiff) { bestDiff = diff; bestMetar = c; bestDt = dt; }
+  }
+  // Fallback to any report type if no plain METAR
+  if (!bestMetar) {
+    for (const c of candidates) {
+      const dt   = metarDt(c, now);
+      const diff = dt ? Math.abs(dt - targetDt) : Infinity;
+      if (diff < bestDiff) { bestDiff = diff; bestMetar = c; bestDt = dt; }
+    }
+  }
+
+  const all = bestMetar ? [{ report: bestMetar, dt: bestDt }] : [];
+  for (const c of candidates) {
+    if (!c.startsWith('SPECI ')) continue;
+    const dt = metarDt(c, now);
+    if (dt && Math.abs(dt - targetDt) <= WINDOW && !all.find(r => r.report === c))
+      all.push({ report: c, dt });
+  }
+  all.sort((a, b) => (a.dt ? a.dt.getTime() : 0) - (b.dt ? b.dt.getTime() : 0));
+  return all;
+}
+
+function getReportsForWindow(candidates, targetDt, windowMs) {
+  const now = new Date();
+
+  // Best METAR within window
+  let bestMetar = null, bestDiff = Infinity, bestDt = null, exactMatch = false;
+  for (const c of candidates) {
+    if (!c.startsWith('METAR ')) continue;
+    const dt   = metarDt(c, now);
+    const diff = dt ? Math.abs(dt - targetDt) : Infinity;
+    if (diff <= windowMs && diff < bestDiff) {
+      bestDiff = diff; bestMetar = c; bestDt = dt; exactMatch = diff <= 60000;
+    }
+  }
+
+  const all = bestMetar ? [{ report: bestMetar, dt: bestDt, exactMatch }] : [];
+  for (const c of candidates) {
+    if (!c.startsWith('SPECI ')) continue;
+    const dt = metarDt(c, now);
+    if (dt && Math.abs(dt - targetDt) <= windowMs)
+      all.push({ report: c, dt, exactMatch: true });
+  }
+  all.sort((a, b) => (a.dt ? a.dt.getTime() : 0) - (b.dt ? b.dt.getTime() : 0));
+  return { reports: all, hasMetar: !!bestMetar };
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────
 function launchPlane() {
   const btn = document.getElementById('generate-btn');
@@ -1393,9 +1563,10 @@ async function generateSingle() {
   const tafUrl   = `https://aviationweather.gov/api/data/taf` +
                    `?ids=${encodeURIComponent(ids)}&hours=${hoursBack}&format=raw`;
 
-  const [metarRaw, tafRaw] = await Promise.all([
+  const [metarRaw, tafRaw, sigmetLines] = await Promise.all([
     fetchViaProxy(metarUrl),
     fetchViaProxy(tafUrl),
+    fetchSigmet(),
   ]);
 
   btn.disabled = false;
@@ -1405,8 +1576,8 @@ async function generateSingle() {
   }
 
   // ── Parse & render ────────────────────────────────────────────────────
-  const metars = metarRaw ? parseMetarText(metarRaw, targetDt) : {};
-  const tafs   = tafRaw   ? parseTafText(tafRaw)               : {};
+  const allMetars = metarRaw ? parseAllMetarsText(metarRaw) : {};
+  const tafs      = tafRaw   ? parseTafText(tafRaw)         : {};
 
   const metarRows = document.getElementById('metar-rows');
   const tafRows   = document.getElementById('taf-rows');
@@ -1414,14 +1585,25 @@ async function generateSingle() {
   tafRows.innerHTML   = '';
 
   for (const icao of stationList) {
+    const candidates = allMetars[icao] || [];
+    const reports    = getReportsForSingle(candidates, targetDt);
+
     const mDiv = document.createElement('div');
     mDiv.className = 'row';
-    if (metars[icao]) {
-      let rawHtml = colorizeLine(metars[icao], false);
-      const mDt = metarDt(metars[icao], targetDt);
-      if (mDt && (targetDt - mDt) > 90 * 60 * 1000) rawHtml = greyWrap(rawHtml);
-      const decHtml = buildDecodeHtml([metars[icao]]);
-      mDiv.innerHTML = `<div class="row-text">${rawHtml}<div class="decode-block">${decHtml}</div></div>` + buildFcBadge(metars[icao]);
+
+    if (reports.length) {
+      let rowsHtml = '';
+      let fcMetar  = null;
+      for (const { report, dt } of reports) {
+        const isSpeci = report.startsWith('SPECI ');
+        let lineHtml  = colorizeLine(report, false);
+        if (dt && (targetDt - dt) > 90 * 60 * 1000) lineHtml = greyWrap(lineHtml);
+        const label = isSpeci ? '<span class="speci-label">[SPECI]</span> ' : '';
+        rowsHtml += `<div>${label}${lineHtml}</div>`;
+        if (!isSpeci && !fcMetar) fcMetar = report;
+      }
+      const decHtml = buildDecodeHtml(reports.map(r => r.report));
+      mDiv.innerHTML = `<div class="row-text">${rowsHtml}<div class="decode-block">${decHtml}</div></div>` + buildFcBadge(fcMetar || reports[0].report);
       attachBadge(mDiv);
     } else {
       mDiv.innerHTML = `<div class="row-text">No data available for ${esc(icao)}</div>`;
@@ -1441,11 +1623,15 @@ async function generateSingle() {
     tafRows.appendChild(tDiv);
   }
 
-  // Obs time from first available METAR
+  renderSigmet(sigmetLines);
+
+  // Obs time from first available report
   let obsTime = zuluStr + 'Z';
-  for (const icao of stationList) {
-    const m = metars[icao] && metars[icao].match(/\b\d{2}(\d{4})Z\b/);
-    if (m) { obsTime = m[1] + 'Z'; break; }
+  outer: for (const icao of stationList) {
+    for (const { report } of getReportsForSingle(allMetars[icao] || [], targetDt)) {
+      const m = report.match(/\b\d{2}(\d{4})Z\b/);
+      if (m) { obsTime = m[1] + 'Z'; break outer; }
+    }
   }
 
   showResult(
@@ -1512,9 +1698,10 @@ async function generateMulti() {
   const tafUrl   = `https://aviationweather.gov/api/data/taf` +
                    `?ids=${encodeURIComponent(ids)}&hours=${hoursBack}&format=raw`;
 
-  const [metarRaw, tafRaw] = await Promise.all([
+  const [metarRaw, tafRaw, sigmetLines] = await Promise.all([
     fetchViaProxy(metarUrl),
     fetchViaProxy(tafUrl),
+    fetchSigmet(),
   ]);
 
   btn.disabled = false;
@@ -1543,20 +1730,28 @@ async function generateMulti() {
 
     for (const icao of stationList) {
       const candidates = allMetars[icao] || [];
-      const match = findBestMetarForTime(candidates, dt);
+      const { reports } = getReportsForWindow(candidates, dt, 30 * 60 * 1000);
 
       const mDiv = document.createElement('div');
       mDiv.className = 'row';
 
-      if (match) {
+      if (reports.length) {
+        const metarRep = reports.find(r => r.report.startsWith('METAR '));
         let noObsLabel = '';
-        if (!match.exactMatch && match.actualDt) {
-          const actual = `${pad(match.actualDt.getUTCHours())}${pad(match.actualDt.getUTCMinutes())}Z`;
+        if (metarRep && !metarRep.exactMatch && metarRep.dt) {
+          const actual = `${pad(metarRep.dt.getUTCHours())}${pad(metarRep.dt.getUTCMinutes())}Z`;
           noObsLabel = `<div class="no-obs-note">${esc(icao)} — no obs at ${timeStr}Z, showing ${actual}</div>`;
         }
-        const rawHtml = colorizeLine(match.metar, false);
-        const decHtml = buildDecodeHtml([match.metar]);
-        mDiv.innerHTML = `<div class="row-text">${noObsLabel}${rawHtml}<div class="decode-block">${decHtml}</div></div>` + buildFcBadge(match.metar);
+        let rowsHtml = noObsLabel;
+        let fcMetar  = null;
+        for (const { report } of reports) {
+          const isSpeci = report.startsWith('SPECI ');
+          const label   = isSpeci ? '<span class="speci-label">[SPECI]</span> ' : '';
+          rowsHtml += `<div>${label}${colorizeLine(report, false)}</div>`;
+          if (!isSpeci && !fcMetar) fcMetar = report;
+        }
+        const decHtml = buildDecodeHtml(reports.map(r => r.report));
+        mDiv.innerHTML = `<div class="row-text">${rowsHtml}<div class="decode-block">${decHtml}</div></div>` + buildFcBadge(fcMetar || reports[0].report);
         attachBadge(mDiv);
       } else if (!candidates.length) {
         mDiv.innerHTML = `<div class="row-text">No data available for ${esc(icao)}</div>`;
@@ -1584,6 +1779,8 @@ async function generateMulti() {
     }
     tafRows.appendChild(tDiv);
   }
+
+  renderSigmet(sigmetLines);
 
   showResult(`Times: ${targets.map(t => t.timeStr + 'Z').join(', ')}`);
 }
