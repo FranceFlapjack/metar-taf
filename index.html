@@ -580,6 +580,41 @@ body {
   font-family: -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif;
   letter-spacing: 0.04em;
 }
+
+/* ── Runway button active state (mirrors decode button) ──────────────────── */
+#runway-btn.active {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+}
+
+/* ── Runway wind panel ───────────────────────────────────────────────────── */
+.rwy-panel {
+  display: none;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  font-family: -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  line-height: 2.2;
+}
+#content.runway-on .rwy-panel { display: block; }
+.rwy-row { display: flex; flex-wrap: wrap; gap: 2px 16px; align-items: baseline; }
+.rwy-name    { font-family: 'Courier New', Courier, monospace; font-weight: bold; min-width: 60px; }
+.rwy-hw-good { color: #008000; }
+.rwy-hw-bad  { color: #cc0000; font-weight: bold; }
+.rwy-xw-warn { color: #cc0000; font-weight: bold; }
+.rwy-note    { color: var(--muted); font-style: italic; }
+.rwy-disclaimer {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+  font-size: 10px;
+  color: var(--muted);
+  font-style: italic;
+  line-height: 1.5;
+}
+@media print { .rwy-panel { display: none !important; } }
 </style>
 </head>
 <body>
@@ -631,8 +666,9 @@ body {
 
   <!-- ── Action bar ─────────────────────────────────────────────────────── -->
   <div id="action-bar">
-    <button onclick="window.print()">Print / Save as PDF</button>
+    <button onclick="window.print()">Print / PDF</button>
     <button id="decode-btn" onclick="toggleDecode()">Decode</button>
+    <button id="runway-btn" onclick="toggleRunway()">Runway</button>
     <span id="time-label"></span>
   </div>
 
@@ -1501,6 +1537,133 @@ function getReportsForWindow(candidates, targetDt, windowMs) {
   return { reports: all, hasMetar: !!bestMetar };
 }
 
+// ── OurAirports runway data ───────────────────────────────────────────────
+const RUNWAY_CSV_URL = 'https://raw.githubusercontent.com/davidmegginson/ourairports-data/main/runways.csv';
+let runwayDb = null;
+
+async function loadRunwayData() {
+  if (runwayDb !== null) return runwayDb;
+  try {
+    const resp = await fetch(RUNWAY_CSV_URL, { signal: AbortSignal.timeout(12000) });
+    if (!resp.ok) { runwayDb = {}; return runwayDb; }
+    const text = await resp.text();
+    runwayDb = parseRunwayCsv(text);
+  } catch (_) { runwayDb = {}; }
+  return runwayDb;
+}
+
+function parseRunwayCsv(text) {
+  const lines   = text.split('\n');
+  if (!lines.length) return {};
+  const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+  const col     = h => headers.indexOf(h);
+  const iIdent  = col('airport_ident');
+  const iLeId   = col('le_ident');
+  const iLeHdg  = col('le_heading_degT');
+  const iHeId   = col('he_ident');
+  const iHeHdg  = col('he_heading_degT');
+  if (iIdent < 0 || iLeHdg < 0 || iHeHdg < 0) return {};
+  const result = {};
+  for (let i = 1; i < lines.length; i++) {
+    const cols  = lines[i].split(',');
+    const icao  = (cols[iIdent] || '').replace(/"/g, '').trim();
+    const leId  = (cols[iLeId]  || '').replace(/"/g, '').trim();
+    const leHdg = parseFloat(cols[iLeHdg]);
+    const heId  = (cols[iHeId]  || '').replace(/"/g, '').trim();
+    const heHdg = parseFloat(cols[iHeHdg]);
+    if (!icao || isNaN(leHdg) || isNaN(heHdg)) continue;
+    (result[icao] = result[icao] || []).push({ leId, leHdg, heId, heHdg });
+  }
+  return result;
+}
+
+// ── Runway wind component calculation ─────────────────────────────────────
+function normAngle(deg) {
+  deg = ((deg % 360) + 360) % 360;
+  if (deg > 180) deg -= 360;
+  return deg;
+}
+
+function extractWindFromMetar(line) {
+  const m = line.match(/\b(VRB|\d{3})(\d{2,3})(?:G\d{2,3})?(KT|MPS|KMH)\b/);
+  if (!m) return /\bCAVOK\b/.test(line) ? { dir: '000', spd: 0 } : null;
+  let spd = parseInt(m[2], 10);
+  if (m[3] === 'MPS') spd = Math.round(spd * 1.944);
+  if (m[3] === 'KMH') spd = Math.round(spd * 0.540);
+  return { dir: m[1], spd };
+}
+
+function buildRunwayPanelHtml(icao, metarLine, runways) {
+  const wind = extractWindFromMetar(metarLine);
+  if (!wind)
+    return `<div class="rwy-note">Wind data not found in METAR</div>${rwyDisclaimer()}`;
+  if (wind.dir === 'VRB')
+    return `<div class="rwy-note">Variable wind — runway component unavailable</div>${rwyDisclaimer()}`;
+  if (wind.spd === 0)
+    return `<div class="rwy-note">Calm — all runways suitable</div>${rwyDisclaimer()}`;
+  if (!runways || !runways.length)
+    return `<div class="rwy-note">No runway data for ${esc(icao)}</div>`;
+
+  const windDir = parseInt(wind.dir, 10);
+  let html = '';
+
+  for (const rwy of runways) {
+    for (const [rwyId, rwyHdg] of [[rwy.leId, rwy.leHdg], [rwy.heId, rwy.heHdg]]) {
+      if (!rwyId || isNaN(rwyHdg)) continue;
+      const rad   = normAngle(windDir - rwyHdg) * Math.PI / 180;
+      const hwKt  = Math.round(wind.spd * Math.cos(rad));
+      const xwKt  = Math.round(wind.spd * Math.sin(rad));
+      const hwAbs = Math.abs(hwKt);
+      const xwAbs = Math.abs(xwKt);
+
+      const hwHtml = hwKt >= 0
+        ? `<span class="rwy-hw-good">↓ ${hwAbs}kt headwind</span>`
+        : `<span class="rwy-hw-bad">↑ ${hwAbs}kt tailwind ⚠️</span>`;
+
+      let xwHtml = '';
+      if (xwAbs > 0) {
+        const arrow = xwKt > 0 ? '→' : '←';
+        const side  = xwKt > 0 ? 'right' : 'left';
+        xwHtml = xwAbs > 15
+          ? `<span class="rwy-xw-warn">${arrow} ${xwAbs}kt ${side} ⚠️</span>`
+          : `<span>${arrow} ${xwAbs}kt ${side}</span>`;
+      }
+
+      html += `<div class="rwy-row"><span class="rwy-name">RWY ${esc(rwyId)}</span>${hwHtml}${xwHtml}</div>`;
+    }
+  }
+
+  return html + rwyDisclaimer();
+}
+
+function rwyDisclaimer() {
+  return '<div class="rwy-disclaimer">Runway heading from OurAirports data — verify magnetic heading against official charts before flight</div>';
+}
+
+function populateRunwayPanels(db) {
+  document.querySelectorAll('.rwy-panel:not([data-loaded])').forEach(panel => {
+    const icao  = panel.dataset.icao  || '';
+    const metar = panel.dataset.metar || '';
+    if (!icao) return;
+    panel.innerHTML      = buildRunwayPanelHtml(icao, metar, db[icao] || []);
+    panel.dataset.loaded = '1';
+  });
+}
+
+let runwayMode = false;
+async function toggleRunway() {
+  runwayMode = !runwayMode;
+  contentEl.classList.toggle('runway-on', runwayMode);
+  document.getElementById('runway-btn').classList.toggle('active', runwayMode);
+  if (runwayMode) {
+    const db = await loadRunwayData();
+    populateRunwayPanels(db);
+  }
+}
+
+// Prefetch runway data in background when page loads
+loadRunwayData();
+
 // ── Main ─────────────────────────────────────────────────────────────────
 function launchPlane() {
   const btn = document.getElementById('generate-btn');
@@ -1603,7 +1766,9 @@ async function generateSingle() {
         if (!isSpeci && !fcMetar) fcMetar = report;
       }
       const decHtml = buildDecodeHtml(reports.map(r => r.report));
-      mDiv.innerHTML = `<div class="row-text">${rowsHtml}<div class="decode-block">${decHtml}</div></div>` + buildFcBadge(fcMetar || reports[0].report);
+      mDiv.innerHTML = `<div class="row-text">${rowsHtml}<div class="decode-block">${decHtml}</div><div class="rwy-panel"></div></div>` + buildFcBadge(fcMetar || reports[0].report);
+      const rwyPanelS = mDiv.querySelector('.rwy-panel');
+      if (rwyPanelS) { rwyPanelS.dataset.icao = icao; rwyPanelS.dataset.metar = fcMetar || reports[0].report; }
       attachBadge(mDiv);
     } else {
       mDiv.innerHTML = `<div class="row-text">No data available for ${esc(icao)}</div>`;
@@ -1624,6 +1789,7 @@ async function generateSingle() {
   }
 
   renderSigmet(sigmetLines);
+  if (runwayMode) loadRunwayData().then(populateRunwayPanels);
 
   // Obs time from first available report
   let obsTime = zuluStr + 'Z';
@@ -1751,7 +1917,9 @@ async function generateMulti() {
           if (!isSpeci && !fcMetar) fcMetar = report;
         }
         const decHtml = buildDecodeHtml(reports.map(r => r.report));
-        mDiv.innerHTML = `<div class="row-text">${rowsHtml}<div class="decode-block">${decHtml}</div></div>` + buildFcBadge(fcMetar || reports[0].report);
+        mDiv.innerHTML = `<div class="row-text">${rowsHtml}<div class="decode-block">${decHtml}</div><div class="rwy-panel"></div></div>` + buildFcBadge(fcMetar || reports[0].report);
+        const rwyPanelM = mDiv.querySelector('.rwy-panel');
+        if (rwyPanelM) { rwyPanelM.dataset.icao = icao; rwyPanelM.dataset.metar = fcMetar || reports[0].report; }
         attachBadge(mDiv);
       } else if (!candidates.length) {
         mDiv.innerHTML = `<div class="row-text">No data available for ${esc(icao)}</div>`;
@@ -1781,6 +1949,7 @@ async function generateMulti() {
   }
 
   renderSigmet(sigmetLines);
+  if (runwayMode) loadRunwayData().then(populateRunwayPanels);
 
   showResult(`Times: ${targets.map(t => t.timeStr + 'Z').join(', ')}`);
 }
