@@ -1114,24 +1114,70 @@ document.getElementById('day').addEventListener('input', validateTime);
 document.getElementById('zulu').addEventListener('input', validateTime);
 
 // ── Proxy fetch helper ────────────────────────────────────────────────────
+// Staggered parallel racing: the last-known-good proxy launches first; each
+// remaining proxy joins the race only if no valid response has arrived after
+// another PROXY_STAGGER_MS (or immediately when a proxy fails fast).  First
+// valid response wins and is remembered in localStorage, so a proxy that
+// dies in the future costs at most one stagger delay — never a serial
+// timeout cascade.  Health checked 2026-07-11; keep at least 3 live entries.
 const PROXIES = [
   { prefix: 'https://cors.eu.org/',                          encode: false },
-  { prefix: 'https://api.codetabs.com/v1/proxy?quest=',     encode: true  },
-  { prefix: 'https://allorigins.hexlet.app/raw?url=',       encode: true  },
+  { prefix: 'https://api.cors.lol/?url=',                    encode: true  },
+  { prefix: 'https://allorigins.hexlet.app/raw?url=',        encode: true  },
+  { prefix: 'https://corsproxy.io/?url=',                    encode: true  },
+  { prefix: 'https://api.codetabs.com/v1/proxy?quest=',      encode: true  },
 ];
+const PROXY_STAGGER_MS = 1500;
+const PROXY_TIMEOUT_MS = 8000;
+const PROXY_PREF_KEY   = 'proxyPref';
 
-async function fetchViaProxy(apiUrl) {
-  for (const proxy of PROXIES) {
-    const url = proxy.prefix + (proxy.encode ? encodeURIComponent(apiUrl) : apiUrl);
-    try {
-      const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
-      if (!resp.ok) continue;
-      const text = await resp.text();
-      // Skip empty responses or HTML error pages (METAR/TAF never starts with '<')
-      if (text && !text.trimStart().startsWith('<')) return text;
-    } catch (_) {}
-  }
-  return null;
+function orderedProxies() {
+  let pref = null;
+  try { pref = localStorage.getItem(PROXY_PREF_KEY); } catch (_) {}
+  const hit = pref && PROXIES.find(p => p.prefix === pref);
+  return hit ? [hit, ...PROXIES.filter(p => p !== hit)] : PROXIES.slice();
+}
+
+async function tryProxy(proxy, apiUrl) {
+  const url  = proxy.prefix + (proxy.encode ? encodeURIComponent(apiUrl) : apiUrl);
+  const resp = await fetch(url, { signal: AbortSignal.timeout(PROXY_TIMEOUT_MS) });
+  if (!resp.ok) throw new Error('HTTP ' + resp.status);
+  const text = await resp.text();
+  // Reject HTML error pages ('<') and proxy JSON errors ('{') served as 200.
+  // An EMPTY 2xx body is valid: aviationweather.gov legitimately returns
+  // nothing (e.g. no active SIGMETs, unknown ICAO).
+  const first = text.trimStart()[0];
+  if (first === '<' || first === '{') throw new Error('error page');
+  return text;
+}
+
+// Resolves with the response text ('' = valid but empty) or null if every
+// proxy failed.  Never rejects.
+function fetchViaProxy(apiUrl) {
+  return new Promise(resolve => {
+    const proxies = orderedProxies();
+    let launched = 0, pending = 0, settled = false;
+
+    const finish = value => { if (!settled) { settled = true; resolve(value); } };
+
+    const launch = () => {
+      if (settled || launched >= proxies.length) return;
+      const proxy = proxies[launched++];
+      pending++;
+      tryProxy(proxy, apiUrl)
+        .then(text => {
+          try { localStorage.setItem(PROXY_PREF_KEY, proxy.prefix); } catch (_) {}
+          finish(text);
+        })
+        .catch(() => {
+          pending--;
+          if (launched < proxies.length) launch();   // fast-fail → next joins now
+          else if (pending === 0) finish(null);      // everyone failed
+        });
+      if (launched < proxies.length) setTimeout(launch, PROXY_STAGGER_MS);
+    };
+    launch();
+  });
 }
 
 // ── Flight category ───────────────────────────────────────────────────────
@@ -1437,9 +1483,11 @@ function attachBadge(container) {
 
 // ── SIGMET fetch & render ─────────────────────────────────────────────────
 async function fetchSigmet() {
+  // isigmet = international SIGMETs (the plain /sigmet endpoint is US-domestic
+  // only and can never contain Thai FIRs; its hazard=CONVECTIVE param was also
+  // removed upstream and now returns HTTP 400 — checked 2026-07-11).
   const sigmetUrls = [
-    'https://aviationweather.gov/api/data/sigmet?format=raw&hazard=CONVECTIVE',
-    'https://aviationweather.gov/api/data/sigmet?format=raw',
+    'https://aviationweather.gov/api/data/isigmet?format=raw',
   ];
   const inner = async () => {
     const results = await Promise.allSettled(sigmetUrls.map(u => fetchViaProxy(u)));
@@ -1451,7 +1499,8 @@ async function fetchSigmet() {
       for (const block of blocks) {
         const trimmed = block.trim();
         if (!trimmed || seen.has(trimmed)) continue;
-        if (/\b(VTCC|VTBD)\b/.test(trimmed)) { seen.add(trimmed); thailand.push(trimmed); }
+        // VTBB = Bangkok FIR (issues all Thailand SIGMETs), VTBD/VTCC kept for safety
+        if (/\b(VTBB|VTBD|VTCC)\b/.test(trimmed)) { seen.add(trimmed); thailand.push(trimmed); }
       }
     }
     return thailand;
