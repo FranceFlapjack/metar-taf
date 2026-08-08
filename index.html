@@ -645,7 +645,7 @@ body {
     <div class="fields">
       <div class="field" id="f-stations">
         <label for="stations">Airport IDs</label>
-        <input type="text" id="stations" placeholder="VTPO VTPP VTCL VTCN VTCP">
+        <input type="text" id="stations" placeholder="airport ICAO code">
       </div>
       <div class="field" id="f-day">
         <label for="day">UTC Day</label>
@@ -899,12 +899,13 @@ function colorizeLine(line, inTaf) {
     // METAR keyword → black
     if (t === 'METAR') { result.push(s); continue; }
 
-    // Station ICAO code (first token, or right after METAR/SPECI/TAF/AMD/COR) → bold.
+    // Station ICAO code (first token, or right after METAR/SPECI/TAF/AMD/COR) →
+    // normal weight, same as the rest of the raw text line.
     // isWeather guard: keeps 4-letter weather tokens (e.g. VCTS, VCSH) that can
     // start a wrapped TAF continuation line from being mistaken for a station.
     if (/^[A-Z]{4}$/.test(t) && !isWeather(t) &&
         (i === 0 || ['METAR', 'SPECI', 'TAF', 'AMD', 'COR'].includes(tokens[i - 1]))) {
-      result.push(span('c-bold', s)); continue;
+      result.push(s); continue;
     }
 
     // Wind shear group: WS Rnn/ddddU  or  WS ALL RWY → red bold + ⚠️
