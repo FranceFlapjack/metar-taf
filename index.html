@@ -1783,8 +1783,11 @@ async function generateSingle() {
 
   const metarUrl = `https://aviationweather.gov/api/data/metar` +
                    `?ids=${encodeURIComponent(ids)}&hours=${hoursBack}&sep=true&format=raw`;
+  // No `hours` on the TAF endpoint — upstream rejects it with HTTP 400
+  // ('Unexpected query parameter provided'). It bought nothing anyway: this
+  // endpoint only ever returns the current TAF per station.
   const tafUrl   = `https://aviationweather.gov/api/data/taf` +
-                   `?ids=${encodeURIComponent(ids)}&hours=${hoursBack}&format=raw`;
+                   `?ids=${encodeURIComponent(ids)}&format=raw`;
 
   const [metarRaw, tafRaw, sigmetLines] = await Promise.all([
     fetchViaProxy(metarUrl),
@@ -1921,8 +1924,9 @@ async function generateMulti() {
 
   const metarUrl = `https://aviationweather.gov/api/data/metar` +
                    `?ids=${encodeURIComponent(ids)}&hours=${hoursBack}&sep=true&format=raw`;
+  // See note on the TAF URL in the single-time path: `hours` is a 400 here.
   const tafUrl   = `https://aviationweather.gov/api/data/taf` +
-                   `?ids=${encodeURIComponent(ids)}&hours=${hoursBack}&format=raw`;
+                   `?ids=${encodeURIComponent(ids)}&format=raw`;
 
   const [metarRaw, tafRaw, sigmetLines] = await Promise.all([
     fetchViaProxy(metarUrl),
