@@ -5,6 +5,22 @@ is deliberately left online and untouched between roadmap pushes.
 
 ## Done
 
+- **2026-09-03 — Decoder accuracy pass**: `FM0700` (4-digit trend FM) fell
+  through to "Unknown code"; only the 6-digit TAF form `FM131800` was matched.
+  Both forms now decode, and the whole decoder was audited against the spec:
+  present weather is now *composed* from WMO 4678 intensity/descriptor/
+  precipitation/obscuration parts instead of a fixed combination table (so
+  `-TSRA`, `RERA`, `VCBLSN` and friends all resolve, and any unrecognised
+  2-letter chunk fails the whole token rather than producing a partial guess).
+  Added: directional visibility (`3000SE`), `0000`/`9999` limits, `TX`/`TN`,
+  `VV///`, `/////KT`, `CNL`, multi-token `WS ALL RWY` / `WS RWY18`. Fixed: a
+  `continue` ahead of the `skipRest` assignment meant **remarks were being
+  decoded** despite the intent not to; `RMK` now emits one line and stops.
+  Dropped the invented "⚠️ very low pressure" note on `Q` below 1000 hPa —
+  it was editorialising, not decoding. Unknown tokens now read
+  "TOKEN — not recognised, refer to raw report". Decoder module only; raw
+  display, colour coding and the disclaimer untouched.
+
 - **2026-08-17 — TAF fix**: the whole TAF section was silently dead — upstream
   removed `hours` from `/api/data/taf`, which now answers HTTP 400
   ("Unexpected query parameter provided"). Every proxy therefore failed,

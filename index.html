@@ -1269,176 +1269,290 @@ fcTip.addEventListener('mouseleave', scheduleFcHide);
 document.addEventListener('touchstart', () => { fcTip.style.display = 'none'; }, { passive: true });
 
 // ── Decoder ──────────────────────────────────────────────────────────────
+// Accuracy rule: never guess. A token that does not match a known pattern is
+// reported verbatim as unrecognised rather than given an invented meaning.
 const SKIP    = Symbol('skip');
 const UNKNOWN = Symbol('unknown');
 
-const WX = {
-  'RA':    'Rain',              '-RA':   'Light rain',           '+RA':   'Heavy rain',
-  'DZ':    'Drizzle',           '-DZ':   'Light drizzle',        '+DZ':   'Heavy drizzle',
-  'SN':    'Snow',              '-SN':   'Light snow',           '+SN':   'Heavy snow',
-  'SG':    'Snow grains',       'IC':    'Ice crystals',         'PL':    'Ice pellets',
-  'GR':    'Hail',              'GS':    'Small hail',           'UP':    'Unknown precipitation',
-  'BR':    'Mist',              'FG':    'Fog',                  'FU':    'Smoke',
-  'VA':    'Volcanic ash',      'DU':    'Dust',                 'SA':    'Sand',
-  'HZ':    'Haze',              'PY':    'Spray',
-  'PO':    'Dust/sand whirls',  'SQ':    'Squall',
-  'FC':    'Funnel cloud/tornado','SS':  'Sandstorm',            'DS':    'Duststorm',
-  'TS':    'Thunderstorm',
-  'TSRA':  'Thunderstorm with rain',
-  '-TSRA': 'Light thunderstorm with rain',
-  '+TSRA': 'Heavy thunderstorm with rain',
-  'TSSN':  'Thunderstorm with snow',       'TSGR': 'Thunderstorm with hail',
-  'TSGS':  'Thunderstorm with small hail', 'TSPL': 'Thunderstorm with ice pellets',
-  'SHRA':  'Rain shower',    '-SHRA': 'Light rain shower',   '+SHRA': 'Heavy rain shower',
-  'SHSN':  'Snow shower',    '-SHSN': 'Light snow shower',   'SHGR':  'Hail shower',
-  'FZRA':  'Freezing rain',  'FZDZ':  'Freezing drizzle',    'FZFG':  'Freezing fog',
-  'BLSN':  'Blowing snow',   'BLDU':  'Blowing dust',        'BLSA':  'Blowing sand',
-  'DRSN':  'Low drifting snow','DRDU': 'Low drifting dust',   'DRSA':  'Low drifting sand',
-  'NSW':   'No significant weather',
-  'VCTS':  'Thunderstorm in vicinity',  'VCSH':   'Shower in vicinity',
-  'VCFG':  'Fog in vicinity',           'VCBLSN': 'Blowing snow in vicinity',
-  'VCPO':  'Dust whirls in vicinity',   'VCSS':   'Sandstorm in vicinity',
+// Present-weather building blocks (WMO 4678). Weather groups are composed from
+// these rather than looked up whole, so unusual but legal combinations decode
+// correctly; an unrecognised 2-letter chunk fails the whole token to UNKNOWN.
+const WX_DESC = {
+  MI: 'shallow', BC: 'patches of', PR: 'partial', DR: 'low drifting',
+  BL: 'blowing', SH: 'showers',    TS: 'thunderstorm', FZ: 'freezing',
+};
+const WX_PRECIP = {
+  DZ: 'drizzle', RA: 'rain', SN: 'snow', SG: 'snow grains',
+  PL: 'ice pellets', GR: 'hail', GS: 'small hail/snow pellets',
+  UP: 'unknown precipitation', IC: 'ice crystals',
+};
+const WX_OBSC = {
+  BR: 'mist', FG: 'fog', FU: 'smoke', VA: 'volcanic ash',
+  DU: 'dust', SA: 'sand', HZ: 'haze', PY: 'spray',
+};
+const WX_OTHER = {
+  PO: 'dust/sand whirls', SQ: 'squalls', FC: 'funnel cloud',
+  SS: 'sandstorm', DS: 'duststorm',
+};
+// Groups whose plain meaning is not a composition of the parts above.
+const WX_SPECIAL = {
+  'NSW': 'No significant weather',
+  '+FC': 'Tornado or waterspout',
 };
 
-function decodeToken(token) {
+const COMPASS = {
+  N: 'north', NE: 'northeast', E: 'east', SE: 'southeast',
+  S: 'south', SW: 'southwest', W: 'west', NW: 'northwest',
+};
+
+function joinList(a) {
+  if (a.length === 1) return a[0];
+  return a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+}
+
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+// Strip a leading zero for prose ("02" → "2"), keeping the sign separate.
+function tempNum(raw) {
+  const neg = raw.startsWith('M');
+  const n   = parseInt(neg ? raw.slice(1) : raw, 10);
+  if (isNaN(n)) return null;
+  return (neg ? 'minus ' : '') + n;
+}
+
+// Compose a present/recent weather group, or null if not weather.
+function decodeWeather(token) {
+  if (Object.prototype.hasOwnProperty.call(WX_SPECIAL, token)) return WX_SPECIAL[token];
+
+  let s = token, recent = false, intensity = '', vicinity = false;
+  if (s.length > 2 && s.startsWith('RE')) { recent = true; s = s.slice(2); }
+  if (s[0] === '-' || s[0] === '+')       { intensity = s[0]; s = s.slice(1); }
+  if (s.length > 2 && s.startsWith('VC')) { vicinity = true; s = s.slice(2); }
+  if (!s.length || s.length % 2) return null;
+
+  const desc = [], items = [];
+  for (const chunk of s.match(/../g)) {
+    if      (WX_DESC[chunk])   desc.push(chunk);
+    else if (WX_PRECIP[chunk]) items.push(WX_PRECIP[chunk]);
+    else if (WX_OBSC[chunk])   items.push(WX_OBSC[chunk]);
+    else if (WX_OTHER[chunk])  items.push(WX_OTHER[chunk]);
+    else return null;             // unknown chunk — never stitch a partial reading
+  }
+  if (desc.length > 1) return null;
+
+  const d = desc[0];
+  let phrase;
+  if (d === 'TS')      phrase = 'thunderstorm' + (items.length ? ' with ' + joinList(items) : '');
+  else if (d === 'SH') phrase = items.length ? joinList(items) + ' showers' : 'showers';
+  else if (d)          phrase = WX_DESC[d] + (items.length ? ' ' + joinList(items) : '');
+  else if (items.length) phrase = joinList(items);
+  else return null;
+
+  if (intensity === '-')      phrase = 'light ' + phrase;
+  else if (intensity === '+') phrase = 'heavy ' + phrase;
+  if (vicinity) phrase += ' in the vicinity';
+  if (recent)   phrase = 'recent ' + phrase;
+  return cap(phrase);
+}
+
+// ctx carries per-line state: validitySeen (so the first DDHH/DDHH group reads
+// as the report validity and later ones as change-group periods) plus the
+// current token index and previous token, used to spot the station code.
+function decodeToken(token, ctx) {
   if (!token) return SKIP;
 
-  // Report type
+  // Report type / modifiers
   if (token === 'METAR') return 'Routine observation';
   if (token === 'SPECI') return 'Special observation';
   if (token === 'TAF')   return 'Terminal aerodrome forecast';
-  if (token === 'AMD')   return 'Amendment';
-  if (token === 'COR')   return 'Correction';
+  if (token === 'AMD')   return 'Amended';
+  if (token === 'COR')   return 'Corrected';
+  if (token === 'CNL')   return 'Cancelled';
+  if (token === 'NIL')   return 'Missing';
   if (token === 'AUTO')  return 'Automated — no human observer';
-  if (token === 'NIL')   return 'Report not available';
 
-  // 4-letter ICAO station ID — already obvious in raw
-  if (/^[A-Z]{4}$/.test(token)) return SKIP;
+  // 4-letter ICAO station ID — already obvious in raw. Position-guarded so a
+  // 4-letter weather group (VCTS, VCSH) is not mistaken for a station code.
+  if (/^[A-Z]{4}$/.test(token) && !decodeWeather(token) &&
+      (ctx.index === 0 || ['METAR', 'SPECI', 'TAF', 'AMD', 'COR'].includes(ctx.prev)))
+    return SKIP;
 
-  // Observation time DDHHmmZ
+  // Observation / issue time DDHHmmZ
   if (/^\d{6}Z$/.test(token))
-    return `Day ${token.slice(0,2)}, ${token.slice(2,4)}:${token.slice(4,6)}Z`;
+    return `Day ${token.slice(0,2)} at ${token.slice(2,6)}Z`;
 
-  // TAF validity DDHH/DDHH
-  if (/^\d{4}\/\d{4}$/.test(token))
-    return `Valid day ${token.slice(0,2)} ${token.slice(2,4)}:00Z to day ${token.slice(5,7)} ${token.slice(7,9)}:00Z`;
+  // Validity or change-group period DDHH/DDHH
+  if (/^\d{4}\/\d{4}$/.test(token)) {
+    const period = `day ${token.slice(0,2)} ${token.slice(2,4)}00Z to day ${token.slice(5,7)} ${token.slice(7,9)}00Z`;
+    if (!ctx.validitySeen) { ctx.validitySeen = true; return `Valid ${period}`; }
+    return cap(`period ${period}`);
+  }
+
+  // TAF max/min temperature TX35/1306Z, TNM02/1322Z
+  const txM = token.match(/^T([XN])(M?\d{2})\/(\d{2})(\d{2})Z$/);
+  if (txM) {
+    const t = tempNum(txM[2]);
+    if (t !== null)
+      return `${txM[1] === 'X' ? 'Maximum' : 'Minimum'} temperature ${t}°C at day ${txM[3]} ${txM[4]}00Z`;
+  }
 
   // Special flags
-  if (token === 'CAVOK')  return 'Ceiling & Visibility OK — vis ≥10km, no cloud below 5000ft, no significant weather';
-  if (token === 'NSC')    return 'No significant cloud';
-  if (token === 'NCD')    return 'No cloud detected (automated)';
-  if (token === 'SKC')    return 'Sky clear';
-  if (token === 'CLR')    return 'Sky clear below 12,000ft';
-  if (token === 'NOSIG')  return 'No significant change expected';
-  if (token === 'NSW')    return 'No significant weather';
-  if (token === 'RMK')    return SKIP; // remarks section — skip remaining tokens
+  if (token === 'CAVOK')
+    return 'Ceiling and visibility OK — visibility 10 km or more, no cloud below 5000 ft or below highest minimum sector altitude, no CB or TCU, no significant weather';
+  if (token === 'NSC')   return 'No significant cloud';
+  if (token === 'NCD')   return 'No cloud detected';
+  if (token === 'SKC')   return 'Sky clear';
+  if (token === 'CLR')   return 'Sky clear';
+  if (token === 'NOSIG') return 'No significant change expected in next 2 hours';
 
-  // TAF change groups
-  if (token === 'BECMG')  return 'Becoming (permanent change)';
-  if (token === 'TEMPO')  return 'Temporarily (each occurrence <1hr, total <½ of period)';
+  // Change groups
+  if (token === 'BECMG') return 'Becoming — gradual permanent change';
+  if (token === 'TEMPO') return 'Temporarily — fluctuations lasting under 1 hour each';
   const probM = token.match(/^PROB(\d{2})$/);
-  if (probM)              return `${probM[1]}% probability`;
-  const fmM = token.match(/^FM(\d{2})(\d{2})(\d{2})$/);
-  if (fmM)                return `From day ${fmM[1]} ${fmM[2]}:${fmM[3]}Z`;
-  const tlM = token.match(/^TL(\d{2})(\d{2})$/);
-  if (tlM)                return `Until ${tlM[1]}:${tlM[2]}Z`;
-  const atM = token.match(/^AT(\d{2})(\d{2})$/);
-  if (atM)                return `At ${atM[1]}:${atM[2]}Z`;
+  if (probM) return `${parseInt(probM[1], 10)}% probability`;
+  const fm6M = token.match(/^FM(\d{2})(\d{4})$/);
+  if (fm6M) return `From day ${fm6M[1]} at ${fm6M[2]}Z — new prevailing conditions (supersedes all previous groups)`;
+  const fm4M = token.match(/^FM(\d{4})$/);
+  if (fm4M) return `From ${fm4M[1]}Z`;
+  const tlM = token.match(/^TL(\d{4})$/);
+  if (tlM) return `Until ${tlM[1]}Z`;
+  const atM = token.match(/^AT(\d{4})$/);
+  if (atM) return `At ${atM[1]}Z`;
 
-  // Wind: VRB05KT / 27010G18KT / 00000KT
-  const windM = token.match(/^(VRB|\d{3})(\d{2,3})(G(\d{2,3}))?(KT|MPS|KMH)$/);
+  // Wind: 20004KT / VRB03KT / 27010G18KT / 00000KT / /////KT
+  const UNITS = { KT: 'knots', MPS: 'metres per second', KMH: 'km/h' };
+  const windM = token.match(/^(VRB|\d{3}|\/{3})(\d{2,3}|\/{2})(?:G(\d{2,3}))?(KT|MPS|KMH)$/);
   if (windM) {
-    if (windM[1] === '000' && parseInt(windM[2]) === 0) return 'Wind calm';
-    const dir  = windM[1] === 'VRB' ? 'variable direction' : `${windM[1]}°`;
-    const spd  = `${parseInt(windM[2])}${windM[5]}`;
-    const gust = windM[4] ? `, gusting ${parseInt(windM[4])}${windM[5]}` : '';
-    return `Wind from ${dir} at ${spd}${gust}`;
+    const unit = UNITS[windM[4]];
+    if (windM[1] === '///' || windM[2] === '//') return 'Wind not available';
+    if (windM[1] === '000' && parseInt(windM[2], 10) === 0) return 'Calm';
+    const dir  = windM[1] === 'VRB' ? 'Variable direction' : `Wind from ${parseInt(windM[1], 10)} degrees`;
+    const gust = windM[3] ? `, gusting ${parseInt(windM[3], 10)} ${unit}` : '';
+    return `${dir} at ${parseInt(windM[2], 10)} ${unit}${gust}`;
   }
 
-  // Wind variation dddVddd
-  if (/^\d{3}V\d{3}$/.test(token))
-    return `Wind variable between ${token.slice(0,3)}° and ${token.slice(4,7)}°`;
+  // Wind direction variation dddVddd
+  const varM = token.match(/^(\d{3})V(\d{3})$/);
+  if (varM)
+    return `Wind varying between ${parseInt(varM[1], 10)} and ${parseInt(varM[2], 10)} degrees`;
 
-  // Visibility (metric, 4-digit metres)
-  if (/^\d{4}$/.test(token)) {
-    const v = parseInt(token, 10);
-    return v >= 9999 ? 'Visibility 10km or more' : `Visibility ${v >= 1000 ? (v/1000).toFixed(1)+'km' : v+'m'}`;
+  // Visibility, metric — 4 digits, optionally with a direction
+  const visM = token.match(/^(\d{4})(N|NE|E|SE|S|SW|W|NW)?$/);
+  if (visM) {
+    const v = parseInt(visM[1], 10);
+    if (visM[2]) return `${v} m to the ${COMPASS[visM[2]]}`;
+    if (v >= 9999) return '10 km or more';
+    if (v === 0)   return 'Less than 50 m';
+    return `${v} metres`;
   }
 
-  // Vertical visibility VVhhh (hundreds of feet)
-  if (/^VV\d{3}$/.test(token)) {
-    const ft = parseInt(token.slice(2)) * 100;
-    return `Sky obscured, vertical visibility ${ft.toLocaleString()}ft`;
-  }
+  // Vertical visibility
+  if (token === 'VV///') return 'Vertical visibility not available — sky obscured';
+  const vvM = token.match(/^VV(\d{3})$/);
+  if (vvM) return `Vertical visibility ${(parseInt(vvM[1], 10) * 100).toLocaleString()} ft`;
 
   // Cloud
   const cloudM = token.match(/^(FEW|SCT|BKN|OVC)(\d{3})(CB|TCU)?$/);
   if (cloudM) {
-    const amt  = { FEW:'Few (1–2 oktas)', SCT:'Scattered (3–4 oktas)', BKN:'Broken (5–7 oktas)', OVC:'Overcast (8 oktas)' };
-    const ft   = parseInt(cloudM[2]) * 100;
-    const type = cloudM[3] === 'CB' ? ', cumulonimbus' : cloudM[3] === 'TCU' ? ', towering cumulus' : '';
-    return `${amt[cloudM[1]]} at ${ft.toLocaleString()}ft${type}`;
+    const amt  = { FEW: 'Few (1–2 oktas)', SCT: 'Scattered (3–4 oktas)',
+                   BKN: 'Broken (5–7 oktas)', OVC: 'Overcast (8 oktas)' };
+    const ft   = parseInt(cloudM[2], 10) * 100;
+    const type = cloudM[3] === 'CB'  ? ', cumulonimbus ⚠️'
+               : cloudM[3] === 'TCU' ? ', towering cumulus ⚠️' : '';
+    return `${amt[cloudM[1]]} at ${ft.toLocaleString()} ft AGL${type}`;
   }
 
-  // Temperature / dewpoint M?dd/M?dd
-  if (/^M?\d{2}\/M?\d{2}$/.test(token)) {
-    const [tRaw, tdRaw] = token.split('/');
-    const t  = tRaw.startsWith('M')  ? '−'+tRaw.slice(1)  : tRaw;
-    const td = tdRaw.startsWith('M') ? '−'+tdRaw.slice(1) : tdRaw;
-    return `Temperature ${t}°C, dewpoint ${td}°C`;
+  // Temperature / dew point
+  const tempM = token.match(/^(M?\d{2})\/(M?\d{2})$/);
+  if (tempM) {
+    const t = tempNum(tempM[1]), td = tempNum(tempM[2]);
+    if (t !== null && td !== null) return `Temperature ${t}°C, dew point ${td}°C`;
   }
 
-  // Wind shear
-  if (token === 'WS') return '⚠️ Wind shear warning';
-
-  // RVR: R{rwy}{side}/{[P|M]vis}[V{[P|M]vis}][trend]
-  const rvrM = token.match(/^R(\d{2})([LCR]?)\/(P|M)?(\d{4})(?:V(P|M)?(\d{4}))?([DUN]?)$/);
+  // RVR: R{rwy}/{[P|M]vvvv}[V{[P|M]vvvv}][tendency]
+  const rvrM = token.match(/^R(\d{2}[LCR]?)\/(P|M)?(\d{4})(?:V(P|M)?(\d{4}))?([UDN]?)$/);
   if (rvrM) {
-    const rwy   = rvrM[1] + (rvrM[2] || '');
-    const mod1  = rvrM[3] === 'P' ? 'more than ' : rvrM[3] === 'M' ? 'less than ' : '';
-    const v1    = parseInt(rvrM[4], 10);
-    const v2    = rvrM[6] ? parseInt(rvrM[6], 10) : null;
-    const trend = { D: 'decreasing', U: 'increasing', N: 'no change' }[rvrM[7]] || '';
-    const vis   = v2 ? `varying ${v1}m to ${v2}m` : `${mod1}${v1}m`;
-    return `Runway ${rwy} visual range: ${vis}${trend ? ', ' + trend : ''}`;
+    const mod = m => m === 'P' ? 'more than ' : m === 'M' ? 'less than ' : '';
+    const vis = rvrM[5]
+      ? `varying ${mod(rvrM[2])}${parseInt(rvrM[3], 10)} m to ${mod(rvrM[4])}${parseInt(rvrM[5], 10)} m`
+      : `${mod(rvrM[2])}${parseInt(rvrM[3], 10)} m`;
+    const tend = { U: 'increasing', D: 'decreasing', N: 'no change' }[rvrM[6]];
+    return `Runway ${rvrM[1]} visual range ${vis}${tend ? ', ' + tend : ''}`;
   }
 
-  // Altimeter
-  if (/^Q\d{4}$/.test(token)) {
-    const qnh = parseInt(token.slice(1), 10);
-    return `QNH ${qnh} hPa${qnh < 1000 ? ' — ⚠️ very low pressure' : ''}`;
-  }
-  if (/^A\d{4}$/.test(token)) return `Altimeter ${(parseInt(token.slice(1))/100).toFixed(2)} inHg`;
+  // Pressure
+  const qM = token.match(/^Q(\d{4})$/);
+  if (qM) return `QNH ${parseInt(qM[1], 10)} hPa`;
+  const aM = token.match(/^A(\d{4})$/);
+  if (aM) return `Altimeter ${(parseInt(aM[1], 10) / 100).toFixed(2)} inHg`;
 
-  // Present weather (lookup table — only decode what we know)
-  if (Object.prototype.hasOwnProperty.call(WX, token)) return WX[token];
+  // Present / recent weather
+  const wx = decodeWeather(token);
+  if (wx) return wx;
 
   return UNKNOWN;
 }
 
-function decodeLine(line) {
-  const items = [];
-  let skipRest = false;
-  for (const token of line.trim().split(/\s+/)) {
-    if (skipRest) break;
-    const result = decodeToken(token);
+const UNKNOWN_NOTE = 'not recognised, refer to raw report';
+
+// ctx is owned by buildDecodeHtml and spans every line of one report, because
+// TAFs arrive wrapped across several lines (see parseAllTafs).
+function decodeLine(line, ctx) {
+  const items  = [];
+  const tokens = line.trim().split(/\s+/);
+
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    ctx.index = i;
+    ctx.prev  = tokens[i - 1];
+
+    // Remarks are national-format and are deliberately not decoded. Stop for
+    // the rest of this report, not just the rest of this line.
+    if (token === 'RMK') {
+      items.push({ raw: token, text: 'Remarks — content varies by state, not decoded', unknown: false });
+      ctx.stopped = true;
+      break;
+    }
+
+    // Wind shear groups span several tokens: WS ALL RWY / WS RWY18
+    if (token === 'WS') {
+      if (tokens[i + 1] === 'ALL' && tokens[i + 2] === 'RWY') {
+        items.push({ raw: 'WS ALL RWY', text: '⚠️ Wind shear on all runways', unknown: false });
+        i += 2; continue;
+      }
+      const rwyM = (tokens[i + 1] || '').match(/^R(?:WY)?(\d{2}[LCR]?)$/);
+      if (rwyM) {
+        items.push({ raw: `WS ${tokens[i + 1]}`, text: `⚠️ Wind shear on runway ${rwyM[1]}`, unknown: false });
+        i += 1; continue;
+      }
+    }
+
+    const result = decodeToken(token, ctx);
     if (result === SKIP) continue;
     if (result === UNKNOWN)
-      items.push({ raw: token, text: 'Unknown code — check original', unknown: true });
+      items.push({ raw: token, text: `${token} — ${UNKNOWN_NOTE}`, unknown: true });
     else
       items.push({ raw: token, text: result, unknown: false });
-    if (token === 'RMK') skipRest = true;
   }
   return items;
 }
 
+// `lines` is either one array element per METAR report, or the several wrapped
+// lines of a single TAF. A line starting with METAR/SPECI/TAF begins a new
+// report and resets the shared state; continuation lines inherit it.
 function buildDecodeHtml(lines) {
+  const ctx = { validitySeen: false, stopped: false };
   return lines.map(line => {
-    const items = decodeLine(line);
+    if (/^(METAR|SPECI|TAF)\b/.test(line.trim())) {
+      ctx.validitySeen = false;
+      ctx.stopped      = false;
+    }
+    if (ctx.stopped) return '';
+    const items = decodeLine(line, ctx);
     if (!items.length) return '';
     return items.map(item =>
       item.unknown
-        ? `<span class="decode-unknown">${esc(item.raw)} — Unknown code — check original</span>`
+        ? `<span class="decode-unknown">${esc(item.text)}</span>`
         : esc(item.text)
     ).join(' · ');
   }).filter(Boolean).join('<br>');
