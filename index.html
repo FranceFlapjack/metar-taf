@@ -375,7 +375,6 @@ body {
 
 /* ── TMD colour classes ──────────────────────────────────────────────────── */
 .c-maroon  { color: #800000; }
-.c-maroon-b{ color: #800000; font-weight: bold; }
 .c-blue    { color: #0066cc; }
 .c-blue-b  { color: #0066cc; font-weight: bold; }
 .c-blue-u  { color: #0066cc; text-decoration: underline; }
@@ -384,9 +383,6 @@ body {
 .c-red-b   { color: #cc0000; font-weight: bold; }
 .c-amber   { color: #cc8800; }
 .c-grey    { color: #999999; }
-.c-bold    { font-weight: bold; }
-/* legacy aliases kept for decoder */
-.tsra      { color: #800000; font-weight: bold; }
 
 /* ── Colour legend ───────────────────────────────────────────────────────── */
 #legend-toggle {
@@ -727,14 +723,15 @@ body {
 
 // ── Theme ────────────────────────────────────────────────────────────────
 (function () {
-  const saved = localStorage.getItem('theme') || 'light';
+  let saved = 'light';
+  try { saved = localStorage.getItem('theme') || 'light'; } catch (_) {}
   document.documentElement.setAttribute('data-theme', saved);
 })();
 
 function toggleTheme() {
   const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', next);
-  localStorage.setItem('theme', next);
+  try { localStorage.setItem('theme', next); } catch (_) {}
   document.getElementById('theme-toggle').textContent = next === 'dark' ? '☾' : '☀';
 }
 function initThemeIcon() {
@@ -764,7 +761,10 @@ setInterval(tickClock, 1000);
 })();
 
 // ── Enter key submits ────────────────────────────────────────────────────
-document.addEventListener('keydown', e => { if (e.key === 'Enter') generate(); });
+// Skip buttons: Enter on a focused button already fires its own click.
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.tagName !== 'BUTTON') generate();
+});
 
 // ── Multi-time detection ──────────────────────────────────────────────────
 function isMultiInput(val) {
@@ -868,21 +868,14 @@ function colorizeCloud(token) {
   return low ? span('c-blue', s) : s;
 }
 
-// Present/recent weather codes
-const WX_RE = /^(RE|VC)?(-|\+|VC)?(MI|BC|PR|DR|BL|SH|TS|FZ)?(DZ|RA|SN|SG|IC|PL|GR|GS|UP)?(BR|FG|FU|VA|DU|SA|HZ|PY|PO|SQ|FC|SS|DS)?$/;
-function isWeather(token) {
-  if (!token || token.length < 2) return false;
-  if (/^RE[A-Z]{2,}/.test(token)) return true;
-  // common WX codes
-  return /^(VC|-|\+)?(TSRA|TSGR|TSGS|TSSN|TSPL|FZRA|FZDZ|RASN|SNRA|SHSN|SHRA|SHGR|SHGS|BLSN|BLDU|BLSA|DRSN|DRDU|DRSA|FZFG|BCFG|MIFG|PRFG|TS|RA|SN|SG|IC|PL|GR|GS|DZ|FG|BR|HZ|FU|VA|DU|SA|PY|PO|SQ|FC|SS|DS|UP)$/.test(token);
-}
+// Present/recent weather — same rule as the decoder, so colour and decode agree.
+function isWeather(token) { return decodeWeather(token) !== null; }
 
 // ── Main line colorizer ───────────────────────────────────────────────────
-function colorizeLine(line, inTaf) {
+function colorizeLine(line) {
   const tokens = line.trim().split(/\s+/);
   const result = [];
   let inRmk = false;
-  let prevWindSpd = null;
   let wsTokensLeft = 0;
 
   for (let i = 0; i < tokens.length; i++) {
@@ -910,7 +903,7 @@ function colorizeLine(line, inTaf) {
 
     // Wind shear group: WS Rnn/ddddU  or  WS ALL RWY → red bold + ⚠️
     if (t === 'WS') {
-      wsTokensLeft = /^R\d/.test(tokens[i + 1] || '') ? 1 : 2;
+      wsTokensLeft = tokens[i + 1] === 'ALL' ? 2 : 1;   // WS ALL RWY | WS R18 | WS RWY18
       result.push(span('c-red-b', '⚠️ ' + s)); continue;
     }
     if (wsTokensLeft > 0) { wsTokensLeft--; result.push(span('c-red-b', s)); continue; }
@@ -927,8 +920,6 @@ function colorizeLine(line, inTaf) {
 
     // Wind group: DDDffGggKT → split colours
     if (/^(\d{3}|VRB)\d{2,3}(G\d{2,3})?(KT|MPS|KMH)$/.test(t)) {
-      const wm = t.match(/^(\d{3}|VRB)(\d{2,3})/);
-      if (wm) prevWindSpd = parseInt(wm[2], 10);
       result.push(colorizeWind(t)); continue;
     }
 
@@ -961,12 +952,6 @@ function colorizeLine(line, inTaf) {
       result.push(span('c-red', s)); continue;
     }
 
-    // QNH: Q{hPa} — alert if below 1000 hPa (very low for Thailand)
-    if (/^Q\d{4}$/.test(t)) {
-      const qnh = parseInt(t.slice(1), 10);
-      result.push(qnh < 1000 ? span('c-red-b', '⚠️ ' + s) : s);
-      continue;
-    }
 
     // Temperature/dew point
     if (/^M?\d{1,2}\/M?\d{1,2}$/.test(t)) { result.push(colorizeTemp(t)); continue; }
@@ -993,40 +978,6 @@ function metarDt(text, refNow) {
     dt = new Date(Date.UTC(refNow.getUTCFullYear(), refNow.getUTCMonth() - 1,
                            +m[1], +m[2], +m[3]));
   return dt;
-}
-
-// ── Parse METAR text ─────────────────────────────────────────────────────
-function parseMetarText(text, targetDt) {
-  const allMetars = {};
-  const now = new Date();
-
-  for (const rawLine of text.split('\n')) {
-    const stripped = rawLine.trim();
-    if (!stripped) continue;
-    if (/^(METAR|SPECI) /.test(stripped)) {
-      const parts = stripped.split(/\s+/);
-      if (parts.length >= 3) {
-        const icao = parts[1];
-        (allMetars[icao] = allMetars[icao] || []).push(stripped);
-      }
-    }
-  }
-
-  const metars = {};
-  for (const [icao, candidates] of Object.entries(allMetars)) {
-    if (!targetDt) {
-      metars[icao] = candidates[0];
-    } else {
-      let best = candidates[0], bestDiff = Infinity;
-      for (const c of candidates) {
-        const dt   = metarDt(c, now);
-        const diff = dt ? Math.abs(dt - targetDt) : Infinity;
-        if (diff < bestDiff) { bestDiff = diff; best = c; }
-      }
-      metars[icao] = best;
-    }
-  }
-  return metars;
 }
 
 // ── Parse TAF text — one TAF per station (API never returns historical) ────
@@ -1130,13 +1081,14 @@ document.getElementById('zulu').addEventListener('input', validateTime);
 // another PROXY_STAGGER_MS (or immediately when a proxy fails fast).  First
 // valid response wins and is remembered in localStorage, so a proxy that
 // dies in the future costs at most one stagger delay — never a serial
-// timeout cascade.  Health checked 2026-07-11; keep at least 3 live entries.
+// timeout cascade.  Health checked 2026-10-13 from a browser: only hexlet and
+// corsfix answered; cors.eu.org and cors.lol failed but are kept as fallbacks
+// (they fail fast, so they cost almost nothing). Keep at least 3 live entries.
 const PROXIES = [
+  { prefix: 'https://allorigins.hexlet.app/raw?url=',        encode: true  },
+  { prefix: 'https://proxy.corsfix.com/?',                   encode: false },
   { prefix: 'https://cors.eu.org/',                          encode: false },
   { prefix: 'https://api.cors.lol/?url=',                    encode: true  },
-  { prefix: 'https://allorigins.hexlet.app/raw?url=',        encode: true  },
-  { prefix: 'https://corsproxy.io/?url=',                    encode: true  },
-  { prefix: 'https://api.codetabs.com/v1/proxy?quest=',      encode: true  },
 ];
 const PROXY_STAGGER_MS = 1500;
 const PROXY_TIMEOUT_MS = 8000;
@@ -1210,7 +1162,10 @@ const FC_RANK  = { LIFR: 0, IFR: 1, MVFR: 2, VFR: 3 };
 const FC_CLASS = { LIFR: 'fc-lifr', IFR: 'fc-ifr', MVFR: 'fc-mvfr', VFR: 'fc-vfr', CAVOK: 'fc-vfr' };
 
 function classifyFlight(line) {
-  const tokens = line.trim().split(/\s+/);
+  // Observed conditions only: trend groups (TEMPO/BECMG/NOSIG) and remarks are not "now".
+  const all    = line.trim().split(/\s+/);
+  const stop   = all.findIndex(t => /^(TEMPO|BECMG|NOSIG|RMK)$/.test(t));
+  const tokens = stop < 0 ? all : all.slice(0, stop);
   if (tokens.includes('CAVOK')) return { category: 'CAVOK', hasCB: false };
 
   let visM = null, ceilingFt = null, hasCB = false;
@@ -1583,20 +1538,6 @@ function parseAllMetarsText(text) {
   return all;
 }
 
-// ── Find closest METAR within 30 min of targetDt ─────────────────────────
-function findBestMetarForTime(candidates, targetDt) {
-  if (!candidates || !candidates.length) return null;
-  const now = new Date();
-  let best = null, bestDiff = Infinity, bestDt = null;
-  for (const c of candidates) {
-    const dt   = metarDt(c, now);
-    const diff = dt ? Math.abs(dt - targetDt) : Infinity;
-    if (diff < bestDiff) { bestDiff = diff; best = c; bestDt = dt; }
-  }
-  if (bestDiff > 30 * 60 * 1000) return null;
-  return { metar: best, exactMatch: bestDiff <= 60 * 1000, actualDt: bestDt };
-}
-
 // ── Attach badge tooltip listeners (shared helper) ────────────────────────
 function attachBadge(container) {
   const badge = container.querySelector('.fc-badge');
@@ -1611,35 +1552,38 @@ async function fetchSigmet() {
   // isigmet = international SIGMETs (the plain /sigmet endpoint is US-domestic
   // only and can never contain Thai FIRs; its hazard=CONVECTIVE param was also
   // removed upstream and now returns HTTP 400 — checked 2026-07-11).
-  const sigmetUrls = [
-    'https://aviationweather.gov/api/data/isigmet?format=raw',
-  ];
+  // Resolves with the Thai SIGMET blocks ([] = none active) or null if the
+  // fetch failed — a failure must never read as "no SIGMET".
   const inner = async () => {
-    const results = await Promise.allSettled(sigmetUrls.map(u => fetchViaProxy(u)));
-    const seen = new Set(), thailand = [];
-    for (const r of results) {
-      if (r.status !== 'fulfilled' || !r.value) continue;
-      // Split on blank lines or lines starting at column 0 after a '=' terminator
-      const blocks = r.value.split(/\n\s*\n/);
-      for (const block of blocks) {
-        const trimmed = block.trim();
-        if (!trimmed || seen.has(trimmed)) continue;
-        // VTBB = Bangkok FIR (issues all Thailand SIGMETs), VTBD/VTCC kept for safety
-        if (/\b(VTBB|VTBD|VTCC)\b/.test(trimmed)) { seen.add(trimmed); thailand.push(trimmed); }
-      }
-    }
-    return thailand;
+    const text = await fetchViaProxy('https://aviationweather.gov/api/data/isigmet?format=raw');
+    return text === null ? null : thaiSigmets(text);
   };
   try {
-    return await Promise.race([inner(), new Promise(r => setTimeout(() => r([]), 9000))]);
-  } catch (_) { return []; }
+    return await Promise.race([inner(), new Promise(r => setTimeout(() => r(null), 9000))]);
+  } catch (_) { return null; }
+}
+
+// The feed separates SIGMETs with a line of dashes, not blank lines.
+function thaiSigmets(text) {
+  const seen = new Set(), thailand = [];
+  for (const block of text.split(/^-{5,}\s*$/m)) {
+    const trimmed = block.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    // VTBB = Bangkok FIR (issues all Thailand SIGMETs), VTBD/VTCC kept for safety
+    if (/\b(VTBB|VTBD|VTCC)\b/.test(trimmed)) { seen.add(trimmed); thailand.push(trimmed); }
+  }
+  return thailand;
 }
 
 function renderSigmet(sigmetLines) {
   const el = document.getElementById('sigmet-section');
   el.classList.add('visible');
-  if (!sigmetLines || !sigmetLines.length) {
-    el.innerHTML = '<span class="sigmet-none">No active SIGMET for VTCC FIR</span>';
+  if (sigmetLines === null) {
+    el.innerHTML = '<span class="sigmet-active">SIGMET check failed — verify with an official source</span>';
+    return;
+  }
+  if (!sigmetLines.length) {
+    el.innerHTML = '<span class="sigmet-none">No active SIGMET for Bangkok FIR (VTBB)</span>';
     return;
   }
   let html = '<span class="sigmet-active">[SIGMET ACTIVE ⚠️]</span>';
@@ -1708,22 +1652,21 @@ function getReportsForWindow(candidates, targetDt, windowMs) {
       all.push({ report: c, dt, exactMatch: true });
   }
   all.sort((a, b) => (a.dt ? a.dt.getTime() : 0) - (b.dt ? b.dt.getTime() : 0));
-  return { reports: all, hasMetar: !!bestMetar };
+  return all;
 }
 
 // ── OurAirports runway data ───────────────────────────────────────────────
 const RUNWAY_CSV_URL = 'https://raw.githubusercontent.com/davidmegginson/ourairports-data/main/runways.csv';
-let runwayDb = null;
+let runwayDbPromise = null;
 
-async function loadRunwayData() {
-  if (runwayDb !== null) return runwayDb;
-  try {
-    const resp = await fetch(RUNWAY_CSV_URL, { signal: AbortSignal.timeout(12000) });
-    if (!resp.ok) { runwayDb = {}; return runwayDb; }
-    const text = await resp.text();
-    runwayDb = parseRunwayCsv(text);
-  } catch (_) { runwayDb = {}; }
-  return runwayDb;
+// Loaded on first use only (the CSV is ~4 MB). One shared request; a failed
+// load is not cached, so the next Runway press retries.
+function loadRunwayData() {
+  runwayDbPromise = runwayDbPromise || fetch(RUNWAY_CSV_URL, { signal: AbortSignal.timeout(12000) })
+    .then(resp => { if (!resp.ok) throw new Error('HTTP ' + resp.status); return resp.text(); })
+    .then(parseRunwayCsv)
+    .catch(() => { runwayDbPromise = null; return {}; });
+  return runwayDbPromise;
 }
 
 function parseRunwayCsv(text) {
@@ -1742,10 +1685,13 @@ function parseRunwayCsv(text) {
     const cols  = lines[i].split(',');
     const icao  = (cols[iIdent] || '').replace(/"/g, '').trim();
     const leId  = (cols[iLeId]  || '').replace(/"/g, '').trim();
-    const leHdg = parseFloat(cols[iLeHdg]);
+    let   leHdg = parseFloat(cols[iLeHdg]);
     const heId  = (cols[iHeId]  || '').replace(/"/g, '').trim();
-    const heHdg = parseFloat(cols[iHeHdg]);
-    if (!icao || isNaN(leHdg) || isNaN(heHdg)) continue;
+    let   heHdg = parseFloat(cols[iHeHdg]);
+    // Many rows (e.g. VTCC) give only one end's heading; the other is ±180°.
+    if (isNaN(leHdg)) leHdg = (heHdg + 180) % 360;
+    if (isNaN(heHdg)) heHdg = (leHdg + 180) % 360;
+    if (!icao || isNaN(leHdg)) continue;
     (result[icao] = result[icao] || []).push({ leId, leHdg, heId, heHdg });
   }
   return result;
@@ -1760,7 +1706,7 @@ function normAngle(deg) {
 
 function extractWindFromMetar(line) {
   const m = line.match(/\b(VRB|\d{3})(\d{2,3})(?:G\d{2,3})?(KT|MPS|KMH)\b/);
-  if (!m) return /\bCAVOK\b/.test(line) ? { dir: '000', spd: 0 } : null;
+  if (!m) return null;   // CAVOK says nothing about wind — never infer calm
   let spd = parseInt(m[2], 10);
   if (m[3] === 'MPS') spd = Math.round(spd * 1.944);
   if (m[3] === 'KMH') spd = Math.round(spd * 0.540);
@@ -1819,8 +1765,8 @@ function populateRunwayPanels(db) {
     const icao  = panel.dataset.icao  || '';
     const metar = panel.dataset.metar || '';
     if (!icao) return;
-    panel.innerHTML      = buildRunwayPanelHtml(icao, metar, db[icao] || []);
-    panel.dataset.loaded = '1';
+    panel.innerHTML = buildRunwayPanelHtml(icao, metar, db[icao] || []);
+    if (Object.keys(db).length) panel.dataset.loaded = '1';   // empty db = failed load, retry later
   });
 }
 
@@ -1835,9 +1781,6 @@ async function toggleRunway() {
   }
 }
 
-// Prefetch runway data in background when page loads
-loadRunwayData();
-
 // ── Main ─────────────────────────────────────────────────────────────────
 function launchPlane() {
   const btn = document.getElementById('generate-btn');
@@ -1851,7 +1794,55 @@ function launchPlane() {
   plane.addEventListener('animationend', () => plane.remove());
 }
 
+// Fetch METAR, TAF and SIGMET together. Returns null (error already shown)
+// when both METAR and TAF failed.
+async function fetchBriefing(stationList, hoursBack) {
+  const ids = encodeURIComponent(stationList.join(','));
+  btn.disabled = true;
+  hideResult();
+  setStatus('loading', 'Fetching data from aviationweather.gov…');
+
+  // No `hours` on the TAF endpoint — upstream rejects it with HTTP 400
+  // ('Unexpected query parameter provided'). It bought nothing anyway: this
+  // endpoint only ever returns the current TAF per station.
+  const [metarRaw, tafRaw, sigmetLines] = await Promise.all([
+    fetchViaProxy(`https://aviationweather.gov/api/data/metar?ids=${ids}&hours=${hoursBack}&sep=true&format=raw`),
+    fetchViaProxy(`https://aviationweather.gov/api/data/taf?ids=${ids}&format=raw`),
+    fetchSigmet(),
+  ]);
+
+  btn.disabled = false;
+  if (metarRaw === null && tafRaw === null) {
+    showError('Could not fetch data — all proxies failed.');
+    return null;
+  }
+  return {
+    allMetars: metarRaw ? parseAllMetarsText(metarRaw) : {},
+    tafs:      tafRaw   ? parseTafText(tafRaw)         : {},
+    sigmetLines,
+  };
+}
+
+function renderTafs(tafs, stationList) {
+  const tafRows = document.getElementById('taf-rows');
+  tafRows.innerHTML = '';
+  for (const icao of stationList) {
+    const tDiv = document.createElement('div');
+    tDiv.className = 'row';
+    const tafLines = tafs[icao];
+    if (tafLines) {
+      const rawHtml = tafLines.map(l => colorizeLine(l)).join('<br>');
+      const decHtml = buildDecodeHtml(tafLines);
+      tDiv.innerHTML = `<div class="row-text">${rawHtml}<div class="decode-block">${decHtml}</div></div>`;
+    } else {
+      tDiv.innerHTML = `<div class="row-text">No data available for ${esc(icao)}</div>`;
+    }
+    tafRows.appendChild(tDiv);
+  }
+}
+
 function generate() {
+  if (btn.disabled) return;   // fetch in flight, or input already flagged invalid
   const val = document.getElementById('zulu').value.trim();
   if (isMultiInput(val)) generateMulti(); else generateSingle();
 }
@@ -1888,41 +1879,12 @@ async function generateSingle() {
 
   const stationList = stationsRaw.split(/[\s,]+/).map(s => s.toUpperCase()).filter(Boolean);
   if (!stationList.length) return showError('Enter at least one airport ICAO code.');
-  const ids         = stationList.join(',');
 
-  // ── Fetch ─────────────────────────────────────────────────────────────
-  btn.disabled = true;
-  hideResult();
-  setStatus('loading', 'Fetching data from aviationweather.gov…');
-
-  const metarUrl = `https://aviationweather.gov/api/data/metar` +
-                   `?ids=${encodeURIComponent(ids)}&hours=${hoursBack}&sep=true&format=raw`;
-  // No `hours` on the TAF endpoint — upstream rejects it with HTTP 400
-  // ('Unexpected query parameter provided'). It bought nothing anyway: this
-  // endpoint only ever returns the current TAF per station.
-  const tafUrl   = `https://aviationweather.gov/api/data/taf` +
-                   `?ids=${encodeURIComponent(ids)}&format=raw`;
-
-  const [metarRaw, tafRaw, sigmetLines] = await Promise.all([
-    fetchViaProxy(metarUrl),
-    fetchViaProxy(tafUrl),
-    fetchSigmet(),
-  ]);
-
-  btn.disabled = false;
-  if (metarRaw === null && tafRaw === null) {
-    showError('Could not fetch data — all proxies failed.');
-    return;
-  }
-
-  // ── Parse & render ────────────────────────────────────────────────────
-  const allMetars = metarRaw ? parseAllMetarsText(metarRaw) : {};
-  const tafs      = tafRaw   ? parseTafText(tafRaw)         : {};
-
+  const data = await fetchBriefing(stationList, hoursBack);
+  if (!data) return;
+  const { allMetars, tafs, sigmetLines } = data;
   const metarRows = document.getElementById('metar-rows');
-  const tafRows   = document.getElementById('taf-rows');
   metarRows.innerHTML = '';
-  tafRows.innerHTML   = '';
 
   for (const icao of stationList) {
     const candidates = allMetars[icao] || [];
@@ -1936,7 +1898,7 @@ async function generateSingle() {
       let fcMetar  = null;
       for (const { report, dt } of reports) {
         const isSpeci = report.startsWith('SPECI ');
-        let lineHtml  = colorizeLine(report, false);
+        let lineHtml  = colorizeLine(report);
         if (dt && (targetDt - dt) > 90 * 60 * 1000) lineHtml = greyWrap(lineHtml);
         const label = isSpeci ? '<span class="speci-label">[SPECI]</span> ' : '';
         rowsHtml += `<div>${label}${lineHtml}</div>`;
@@ -1951,20 +1913,9 @@ async function generateSingle() {
       mDiv.innerHTML = `<div class="row-text">No data available for ${esc(icao)}</div>`;
     }
     metarRows.appendChild(mDiv);
-
-    const tDiv = document.createElement('div');
-    tDiv.className = 'row';
-    const tafLines = tafs[icao];
-    if (tafLines) {
-      const rawHtml = tafLines.map(l => colorizeLine(l, true)).join('<br>');
-      const decHtml = buildDecodeHtml(tafLines);
-      tDiv.innerHTML = `<div class="row-text">${rawHtml}<div class="decode-block">${decHtml}</div></div>`;
-    } else {
-      tDiv.innerHTML = `<div class="row-text">No data available for ${esc(icao)}</div>`;
-    }
-    tafRows.appendChild(tDiv);
   }
 
+  renderTafs(tafs, stationList);
   renderSigmet(sigmetLines);
   if (runwayMode) loadRunwayData().then(populateRunwayPanels);
 
@@ -1991,15 +1942,7 @@ async function generateMulti() {
   const multiRaw    = document.getElementById('zulu').value.trim();
 
   // Parse and normalise time strings
-  const timeStrings = multiRaw.split(/[\s,]+/)
-    .map(s => {
-      const d = s.replace(/\D/g, '').slice(0, 4);
-      if (!d) return null;
-      if (d.length <= 2) return d.padStart(2, '0') + '00';
-      if (d.length === 3) return '0' + d;
-      return d;
-    })
-    .filter(Boolean);
+  const timeStrings = multiRaw.split(/[\s,]+/).map(formatZulu).filter(Boolean);
 
   if (!timeStrings.length) return showError('Enter at least one time, e.g. 0300, 0500, 0700.');
   if (timeStrings.length > 6) return showError('Maximum 6 times allowed.');
@@ -2030,37 +1973,11 @@ async function generateMulti() {
   const hoursBack = Math.ceil((now - targets[0].dt) / 3_600_000) + 2;
   if (hoursBack > 96) return showError('One or more requested times are more than 94 hours ago (API limit is 96 h).');
 
-  const ids = stationList.join(',');
-
-  btn.disabled = true;
-  hideResult();
-  setStatus('loading', 'Fetching data from aviationweather.gov…');
-
-  const metarUrl = `https://aviationweather.gov/api/data/metar` +
-                   `?ids=${encodeURIComponent(ids)}&hours=${hoursBack}&sep=true&format=raw`;
-  // See note on the TAF URL in the single-time path: `hours` is a 400 here.
-  const tafUrl   = `https://aviationweather.gov/api/data/taf` +
-                   `?ids=${encodeURIComponent(ids)}&format=raw`;
-
-  const [metarRaw, tafRaw, sigmetLines] = await Promise.all([
-    fetchViaProxy(metarUrl),
-    fetchViaProxy(tafUrl),
-    fetchSigmet(),
-  ]);
-
-  btn.disabled = false;
-  if (metarRaw === null && tafRaw === null) {
-    showError('Could not fetch data — all proxies failed.');
-    return;
-  }
-
-  const allMetars = metarRaw ? parseAllMetarsText(metarRaw) : {};
-  const tafs      = tafRaw   ? parseTafText(tafRaw)         : {};
-
+  const data = await fetchBriefing(stationList, hoursBack);
+  if (!data) return;
+  const { allMetars, tafs, sigmetLines } = data;
   const metarRows = document.getElementById('metar-rows');
-  const tafRows   = document.getElementById('taf-rows');
   metarRows.innerHTML = '';
-  tafRows.innerHTML   = '';
 
   // Render each time group
   targets.forEach(({ timeStr, dt }, groupIdx) => {
@@ -2074,7 +1991,7 @@ async function generateMulti() {
 
     for (const icao of stationList) {
       const candidates = allMetars[icao] || [];
-      const { reports } = getReportsForWindow(candidates, dt, 30 * 60 * 1000);
+      const reports = getReportsForWindow(candidates, dt, 30 * 60 * 1000);
 
       const mDiv = document.createElement('div');
       mDiv.className = 'row';
@@ -2091,7 +2008,7 @@ async function generateMulti() {
         for (const { report } of reports) {
           const isSpeci = report.startsWith('SPECI ');
           const label   = isSpeci ? '<span class="speci-label">[SPECI]</span> ' : '';
-          rowsHtml += `<div>${label}${colorizeLine(report, false)}</div>`;
+          rowsHtml += `<div>${label}${colorizeLine(report)}</div>`;
           if (!isSpeci && !fcMetar) fcMetar = report;
         }
         const decHtml = buildDecodeHtml(reports.map(r => r.report));
@@ -2111,21 +2028,7 @@ async function generateMulti() {
     metarRows.appendChild(groupDiv);
   });
 
-  // TAF section — shown once at the bottom
-  for (const icao of stationList) {
-    const tDiv = document.createElement('div');
-    tDiv.className = 'row';
-    const tafLines = tafs[icao];
-    if (tafLines) {
-      const rawHtml = tafLines.map(l => colorizeLine(l, true)).join('<br>');
-      const decHtml = buildDecodeHtml(tafLines);
-      tDiv.innerHTML = `<div class="row-text">${rawHtml}<div class="decode-block">${decHtml}</div></div>`;
-    } else {
-      tDiv.innerHTML = `<div class="row-text">No data available for ${esc(icao)}</div>`;
-    }
-    tafRows.appendChild(tDiv);
-  }
-
+  renderTafs(tafs, stationList);
   renderSigmet(sigmetLines);
   if (runwayMode) loadRunwayData().then(populateRunwayPanels);
 

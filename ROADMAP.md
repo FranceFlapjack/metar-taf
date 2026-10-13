@@ -5,6 +5,20 @@ is deliberately left online and untouched between roadmap pushes.
 
 ## Done
 
+- **2026-10-13 — Audit fixes**: SIGMET feed is separated by `-----` lines,
+  not blank lines, so the whole worldwide feed (1,100+ lines) was shown
+  whenever a Thai SIGMET was active — now split correctly. A failed SIGMET
+  fetch now reads "check failed" instead of "No active SIGMET". Flight-category
+  badge ignores TEMPO/BECMG/NOSIG/RMK (`BECMG CAVOK` was turning an MVFR
+  report green). Runway panel: one-ended OurAirports headings (VTCC) now
+  derived ±180°, missing wind + CAVOK no longer reads "Calm", CSV loads on
+  first use instead of every page load (4 MB). Colouring uses the decoder's
+  weather rule (`VCSH` now coloured), `WS RWY18` no longer reds the next group,
+  QNH ⚠️ dropped to match the decoder. Enter no longer double-fires Generate.
+  Theme storage guarded. Dead code removed, single/multi fetch + TAF render
+  merged. Proxies re-checked (only hexlet + corsfix live; codetabs and
+  corsproxy.io dropped). Added `tests.html` (21 parser self-checks).
+
 - **2026-09-03 — Decoder accuracy pass**: `FM0700` (4-digit trend FM) fell
   through to "Unknown code"; only the 6-digit TAF form `FM131800` was matched.
   Both forms now decode, and the whole decoder was audited against the spec:
@@ -44,7 +58,8 @@ is deliberately left online and untouched between roadmap pushes.
 1. [ ] **Shareable URLs** — encode stations in query params
        (`?stations=VTPO,VTPP`) so a daily briefing is a one-click bookmark.
        Small effort, daily payoff.
-2. [ ] **Parser tests** — unit tests for `decodeToken`, `classifyFlight`,
+2. [~] **Parser tests** — `tests.html` started 2026-10-13 (open via
+       `python3 -m http.server`); extend with a real-METAR corpus. Unit tests for `decodeToken`, `classifyFlight`,
        `findBestMetarForTime`, `colorizeLine` against a corpus of real METARs.
        The most fragile code; protects the leave-it-untouched strategy.
 3. [ ] **TAF timeline visualization** — horizontal validity bar showing
@@ -64,8 +79,9 @@ is deliberately left online and untouched between roadmap pushes.
 
 - [ ] **Proxy health re-check every few months**: run each PROXIES entry
       against the METAR API (see comment above `PROXIES` in `index.html`);
-      drop dead ones, keep ≥3 live. Last checked 2026-07-11
-      (codetabs was dead, corsproxy.io blocks non-browser clients).
+      drop dead ones, keep ≥3 live. Last checked 2026-10-13 from a
+      browser: only allorigins.hexlet and corsfix answered — below the ≥3
+      target. Durable fix: own tiny proxy (e.g. Cloudflare Worker).
 - [ ] Watch for aviationweather.gov API changes — both the SIGMET and TAF
       breakages arrived silently, each from a query param the API quietly
       stopped accepting; a quick Generate-and-eyeball after long gaps is worth

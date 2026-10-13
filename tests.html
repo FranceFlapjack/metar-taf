@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>METAR/TAF tests</title>
+<style>
+  body { font: 13px/1.6 'Courier New', monospace; padding: 24px; }
+  .pass { color: #008000; } .fail { color: #cc0000; font-weight: bold; }
+  iframe { display: none; }
+</style>
+</head>
+<body>
+<!-- Parser self-checks. Serve the folder (python3 -m http.server) and open
+     /tests.html. Runs index.html's own functions inside a hidden iframe. -->
+<h3 id="summary">Running…</h3>
+<div id="out"></div>
+<iframe id="app" src="index.html"></iframe>
+<script>
+document.getElementById('app').addEventListener('load', function () {
+  const w = this.contentWindow;
+  const out = document.getElementById('out');
+  let pass = 0, fail = 0;
+  function check(name, got, want) {
+    const ok = JSON.stringify(got) === JSON.stringify(want);
+    ok ? pass++ : fail++;
+    out.insertAdjacentHTML('beforeend',
+      `<div class="${ok ? 'pass' : 'fail'}">${ok ? 'PASS' : 'FAIL'} ${name}` +
+      (ok ? '' : ` — got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`) + '</div>');
+  }
+  const cat = l => w.classifyFlight(l).category;
+
+  // Flight category: observed part only, trend groups ignored
+  check('BECMG CAVOK trend does not make badge CAVOK',
+    cat('METAR VTPO 130000Z 00000KT 3000 BR SCT010 25/24 Q1010 BECMG CAVOK'), 'MVFR');
+  check('TEMPO BKN008 trend does not make badge IFR',
+    cat('METAR VTCC 130900Z 16006KT 9999 SCT035 33/21 Q1013 TEMPO 4000 TSRA BKN008'), 'VFR');
+  check('CAVOK observed', cat('METAR VTCC 130900Z 16006KT CAVOK 33/21 Q1013 NOSIG'), 'CAVOK');
+  check('BKN004 is LIFR', cat('METAR VTCC 130900Z 16006KT 9999 BKN004 25/24 Q1013'), 'LIFR');
+  check('vis 2000 is IFR', cat('METAR VTCC 130900Z 16006KT 2000 HZ SCT040 25/20 Q1013'), 'IFR');
+  check('CB detected', w.classifyFlight('METAR VTCC 130900Z 16006KT 9999 FEW025CB 33/21 Q1013').hasCB, true);
+
+  // Runway wind
+  check('missing wind with CAVOK is not calm',
+    w.extractWindFromMetar('METAR VTCC 130900Z /////KT CAVOK 33/21 Q1013'), null);
+  check('wind 10 MPS → 19 kt',
+    w.extractWindFromMetar('METAR XXXX 130900Z 18010MPS 9999'), { dir: '180', spd: 19 });
+
+  // Runway CSV: one-ended heading rows (VTCC) are kept
+  const csv = 'id,airport_ref,airport_ident,le_ident,le_heading_degT,he_ident,he_heading_degT\n' +
+              '1,2,"VTCC","18",180,"36",\n3,4,"VTPO","18",,"36",1\n5,6,"XXXX","09",,"27",';
+  const db = w.parseRunwayCsv(csv);
+  check('VTCC he heading derived', db.VTCC && db.VTCC[0].heHdg, 0);
+  check('VTPO le heading derived', db.VTPO && db.VTPO[0].leHdg, 181);
+  check('no heading at all skipped', db.XXXX, undefined);
+
+  // SIGMET split on dashed separators
+  const feed = 'Hazard: VA\nWAAF SIGMET 03 VALID 130340/130940 WAAA-\nWAAF FIR VA=\n' +
+               '----------------------\nHazard: TS\nVTBB SIGMET 02 VALID 130630/131030 VTBS-\nVTBB BANGKOK FIR EMBD TS=\n' +
+               '----------------------\nHazard: TS\nVTBB SIGMET 02 VALID 130630/131030 VTBS-\nVTBB BANGKOK FIR EMBD TS=\n' +
+               '----------------------\nHazard: VA\nSEFG SIGMET A2 VALID 130438/131038 SEGU-\n';
+  const th = w.thaiSigmets(feed);
+  check('only the Thai SIGMET kept, deduplicated', th.length, 1);
+  check('Thai block has no foreign text', /WAAF|SEFG/.test(th[0] || ''), false);
+  check('no Thai SIGMET → empty list', w.thaiSigmets('Hazard: VA\nWAAF SIGMET 03\n---------\n'), []);
+
+  // Colouring
+  const col = l => w.colorizeLine(l);
+  check('VCSH coloured as weather', col('METAR VTCC 130900Z 9999 VCSH').includes('<span class="c-maroon">VCSH</span>'), true);
+  check('WS RWY18 does not colour next group',
+    col('METAR VTCC 130900Z WS RWY18 BKN020').includes('<span class="c-blue">BKN020</span>'), true);
+  check('station code not coloured as weather', col('METAR VTCC 130900Z').includes('c-maroon">VTCC'), false);
+  check('QNH plain', col('METAR VTCC 130900Z Q0995').includes('⚠️'), false);
+
+  // Decoder
+  const dec = l => w.buildDecodeHtml([l]);
+  check('FM0700 decodes', dec('METAR VTCC 130900Z 9999 BECMG FM0700 BKN020').includes('From 0700Z'), true);
+  check('-TSRA composed', dec('TAF VTCC 130500Z 1306/1412 -TSRA').includes('Light thunderstorm with rain'), true);
+  check('unknown token flagged', dec('METAR VTCC 130900Z XYZQ').includes('not recognised'), true);
+
+  document.getElementById('summary').textContent =
+    fail ? `${fail} FAILED, ${pass} passed` : `All ${pass} passed`;
+  document.getElementById('summary').className = fail ? 'fail' : 'pass';
+});
+</script>
+</body>
+</html>
