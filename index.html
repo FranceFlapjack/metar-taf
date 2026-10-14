@@ -1101,7 +1101,7 @@ function orderedProxies() {
   return hit ? [hit, ...PROXIES.filter(p => p !== hit)] : PROXIES.slice();
 }
 
-async function tryProxy(proxy, apiUrl) {
+async function tryProxy(proxy, apiUrl, expect) {
   const url  = proxy.prefix + (proxy.encode ? encodeURIComponent(apiUrl) : apiUrl);
   const resp = await fetch(url, { signal: AbortSignal.timeout(PROXY_TIMEOUT_MS) });
   if (!resp.ok) throw new Error('HTTP ' + resp.status);
@@ -1111,12 +1111,15 @@ async function tryProxy(proxy, apiUrl) {
   // nothing (e.g. no active SIGMETs, unknown ICAO).
   const first = text.trimStart()[0];
   if (first === '<' || first === '{') throw new Error('error page');
+  // A plain-text proxy error served as 200 must not win (or be remembered).
+  if (expect && text.trim() && !expect.test(text)) throw new Error('unexpected body');
   return text;
 }
 
 // Resolves with the response text ('' = valid but empty) or null if every
-// proxy failed.  Never rejects.
-function fetchViaProxy(apiUrl) {
+// proxy failed.  Never rejects.  `expect` (optional): a non-empty body must
+// match it, e.g. /^(METAR|SPECI) /m.
+function fetchViaProxy(apiUrl, expect) {
   return new Promise(resolve => {
     const proxies = orderedProxies();
     let launched = 0, pending = 0, settled = false;
@@ -1127,7 +1130,7 @@ function fetchViaProxy(apiUrl) {
       if (settled || launched >= proxies.length) return;
       const proxy = proxies[launched++];
       pending++;
-      tryProxy(proxy, apiUrl)
+      tryProxy(proxy, apiUrl, expect)
         .then(text => {
           try { localStorage.setItem(PROXY_PREF_KEY, proxy.prefix); } catch (_) {}
           finish(text);
@@ -1679,6 +1682,7 @@ function parseRunwayCsv(text) {
   const iLeHdg  = col('le_heading_degT');
   const iHeId   = col('he_ident');
   const iHeHdg  = col('he_heading_degT');
+  const iClosed = col('closed');
   if (iIdent < 0 || iLeHdg < 0 || iHeHdg < 0) return {};
   const result = {};
   for (let i = 1; i < lines.length; i++) {
@@ -1691,7 +1695,7 @@ function parseRunwayCsv(text) {
     // Many rows (e.g. VTCC) give only one end's heading; the other is ±180°.
     if (isNaN(leHdg)) leHdg = (heHdg + 180) % 360;
     if (isNaN(heHdg)) heHdg = (leHdg + 180) % 360;
-    if (!icao || isNaN(leHdg)) continue;
+    if (!icao || isNaN(leHdg) || cols[iClosed] === '1') continue;
     (result[icao] = result[icao] || []).push({ leId, leHdg, heId, heHdg });
   }
   return result;
@@ -1806,8 +1810,8 @@ async function fetchBriefing(stationList, hoursBack) {
   // ('Unexpected query parameter provided'). It bought nothing anyway: this
   // endpoint only ever returns the current TAF per station.
   const [metarRaw, tafRaw, sigmetLines] = await Promise.all([
-    fetchViaProxy(`https://aviationweather.gov/api/data/metar?ids=${ids}&hours=${hoursBack}&sep=true&format=raw`),
-    fetchViaProxy(`https://aviationweather.gov/api/data/taf?ids=${ids}&format=raw`),
+    fetchViaProxy(`https://aviationweather.gov/api/data/metar?ids=${ids}&hours=${hoursBack}&sep=true&format=raw`, /^(METAR|SPECI) /m),
+    fetchViaProxy(`https://aviationweather.gov/api/data/taf?ids=${ids}&format=raw`, /^TAF /m),
     fetchSigmet(),
   ]);
 
@@ -1819,11 +1823,20 @@ async function fetchBriefing(stationList, hoursBack) {
   return {
     allMetars: metarRaw ? parseAllMetarsText(metarRaw) : {},
     tafs:      tafRaw   ? parseTafText(tafRaw)         : {},
+    metarFailed: metarRaw === null,
+    tafFailed:   tafRaw === null,
     sigmetLines,
   };
 }
 
-function renderTafs(tafs, stationList) {
+// "No data" must not hide a failed fetch: the station may well have reports.
+function noDataHtml(icao, failed, kind) {
+  return failed
+    ? `<div class="row-text c-red">${kind} fetch failed for ${esc(icao)} — all proxies down, try again</div>`
+    : `<div class="row-text">No data available for ${esc(icao)}</div>`;
+}
+
+function renderTafs(tafs, stationList, failed) {
   const tafRows = document.getElementById('taf-rows');
   tafRows.innerHTML = '';
   for (const icao of stationList) {
@@ -1835,7 +1848,7 @@ function renderTafs(tafs, stationList) {
       const decHtml = buildDecodeHtml(tafLines);
       tDiv.innerHTML = `<div class="row-text">${rawHtml}<div class="decode-block">${decHtml}</div></div>`;
     } else {
-      tDiv.innerHTML = `<div class="row-text">No data available for ${esc(icao)}</div>`;
+      tDiv.innerHTML = noDataHtml(icao, failed, 'TAF');
     }
     tafRows.appendChild(tDiv);
   }
@@ -1882,7 +1895,7 @@ async function generateSingle() {
 
   const data = await fetchBriefing(stationList, hoursBack);
   if (!data) return;
-  const { allMetars, tafs, sigmetLines } = data;
+  const { allMetars, tafs, sigmetLines, metarFailed, tafFailed } = data;
   const metarRows = document.getElementById('metar-rows');
   metarRows.innerHTML = '';
 
@@ -1910,12 +1923,12 @@ async function generateSingle() {
       if (rwyPanelS) { rwyPanelS.dataset.icao = icao; rwyPanelS.dataset.metar = fcMetar || reports[0].report; }
       attachBadge(mDiv);
     } else {
-      mDiv.innerHTML = `<div class="row-text">No data available for ${esc(icao)}</div>`;
+      mDiv.innerHTML = noDataHtml(icao, metarFailed, 'METAR');
     }
     metarRows.appendChild(mDiv);
   }
 
-  renderTafs(tafs, stationList);
+  renderTafs(tafs, stationList, tafFailed);
   renderSigmet(sigmetLines);
   if (runwayMode) loadRunwayData().then(populateRunwayPanels);
 
@@ -1975,7 +1988,7 @@ async function generateMulti() {
 
   const data = await fetchBriefing(stationList, hoursBack);
   if (!data) return;
-  const { allMetars, tafs, sigmetLines } = data;
+  const { allMetars, tafs, sigmetLines, metarFailed, tafFailed } = data;
   const metarRows = document.getElementById('metar-rows');
   metarRows.innerHTML = '';
 
@@ -2017,7 +2030,7 @@ async function generateMulti() {
         if (rwyPanelM) { rwyPanelM.dataset.icao = icao; rwyPanelM.dataset.metar = fcMetar || reports[0].report; }
         attachBadge(mDiv);
       } else if (!candidates.length) {
-        mDiv.innerHTML = `<div class="row-text">No data available for ${esc(icao)}</div>`;
+        mDiv.innerHTML = noDataHtml(icao, metarFailed, 'METAR');
       } else {
         mDiv.innerHTML = `<div class="row-text"><span class="no-obs-note">No observation within 30 min of ${timeStr}Z for ${esc(icao)}</span></div>`;
       }
@@ -2028,7 +2041,7 @@ async function generateMulti() {
     metarRows.appendChild(groupDiv);
   });
 
-  renderTafs(tafs, stationList);
+  renderTafs(tafs, stationList, tafFailed);
   renderSigmet(sigmetLines);
   if (runwayMode) loadRunwayData().then(populateRunwayPanels);
 

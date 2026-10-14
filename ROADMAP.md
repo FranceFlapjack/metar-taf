@@ -17,7 +17,10 @@ is deliberately left online and untouched between roadmap pushes.
   QNH ⚠️ dropped to match the decoder. Enter no longer double-fires Generate.
   Theme storage guarded. Dead code removed, single/multi fetch + TAF render
   merged. Proxies re-checked (only hexlet + corsfix live; codetabs and
-  corsproxy.io dropped). Added `tests.html` (21 parser self-checks).
+  corsproxy.io dropped). Proxy answers for METAR/TAF must look like reports
+  (a 200 plain-text error no longer wins or gets remembered); a failed fetch
+  now says "fetch failed" instead of "No data available"; closed runways are
+  skipped. Added `tests.html` (24 self-checks). Mobile + print checked.
 
 - **2026-09-03 — Decoder accuracy pass**: `FM0700` (4-digit trend FM) fell
   through to "Unknown code"; only the 6-digit TAF form `FM131800` was matched.

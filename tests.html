@@ -46,12 +46,18 @@ document.getElementById('app').addEventListener('load', function () {
     w.extractWindFromMetar('METAR XXXX 130900Z 18010MPS 9999'), { dir: '180', spd: 19 });
 
   // Runway CSV: one-ended heading rows (VTCC) are kept
-  const csv = 'id,airport_ref,airport_ident,le_ident,le_heading_degT,he_ident,he_heading_degT\n' +
-              '1,2,"VTCC","18",180,"36",\n3,4,"VTPO","18",,"36",1\n5,6,"XXXX","09",,"27",';
+  const csv = 'id,airport_ref,airport_ident,closed,le_ident,le_heading_degT,he_ident,he_heading_degT\n' +
+              '1,2,"VTCC",0,"18",180,"36",\n3,4,"VTPO",0,"18",,"36",1\n5,6,"XXXX",0,"09",,"27",\n' +
+              '7,8,"VTCN",1,"09",90,"27",270\n9,10,"VTCN",0,"02",20.7,"20",200.7';
   const db = w.parseRunwayCsv(csv);
   check('VTCC he heading derived', db.VTCC && db.VTCC[0].heHdg, 0);
   check('VTPO le heading derived', db.VTPO && db.VTPO[0].leHdg, 181);
   check('no heading at all skipped', db.XXXX, undefined);
+  check('closed runway skipped', db.VTCN && db.VTCN.map(r => r.leId), ['02']);
+
+  // Fetch failure is not reported as "no data"
+  check('failed fetch says failed', w.noDataHtml('VTCC', true, 'METAR').includes('fetch failed'), true);
+  check('empty result says no data', w.noDataHtml('VTCC', false, 'METAR').includes('No data available'), true);
 
   // SIGMET split on dashed separators
   const feed = 'Hazard: VA\nWAAF SIGMET 03 VALID 130340/130940 WAAA-\nWAAF FIR VA=\n' +
