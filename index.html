@@ -63,6 +63,7 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
+  overflow-x: hidden;          /* 100vw hero scene must not cause sideways scroll */
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif;
@@ -74,9 +75,40 @@ body {
 
 /* ── Form section ────────────────────────────────────────────────────────── */
 #form-panel {
+  position: relative;
+  isolation: isolate;          /* keeps the scene's z-index:-1 inside this panel */
   padding: 64px 0 52px;
   border-bottom: 1px solid var(--border);
 }
+
+/* ── Decorative ASCII weather scene (behind the form, no interaction) ───── */
+.hero-scene {
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 50%; width: 100vw;     /* full-bleed past the centred column */
+  transform: translateX(-50%);
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+}
+.hero-scene canvas { display: block; width: 100%; height: 100%; }
+/* Left-to-right fade so the title, clock and inputs stay readable. */
+.hero-scene::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to right, var(--bg) 0%, var(--bg) 50%, transparent 100%);
+}
+/* Halo in the page colour keeps form text legible wherever the scene shows through. */
+#form-panel .field label, #form-panel .field input, #time-hint,
+#form-panel h1, .clock-unit {
+  text-shadow: 0 0 2px var(--bg), 0 0 4px var(--bg), 0 0 8px var(--bg);
+}
+/* Narrow screens: the column is the whole width, so tone the scene down. */
+@media (max-width: 700px) { .hero-scene canvas { opacity: .45; } }
+/* The scene paints a light sky; in dark mode invert it (hue-rotate keeps
+   the radar colours roughly the same hue) so it doesn't glare. */
+[data-theme="dark"] .hero-scene canvas { filter: invert(1) hue-rotate(180deg) brightness(.8); }
 
 .form-header {
   display: flex;
@@ -516,7 +548,7 @@ body {
 
 /* ── Print ───────────────────────────────────────────────────────────────── */
 @media print {
-  #form-panel, #status-bar, #action-bar,
+  #form-panel, #status-bar, #action-bar, .hero-scene,
   #legend-toggle { display: none !important; }
   #colour-legend:not(.open) { display: none !important; }
   #content { display: block !important; padding: 20px 0; }
@@ -620,6 +652,7 @@ body {
 
   <!-- ── Form ───────────────────────────────────────────────────────────── -->
   <div id="form-panel">
+    <div class="hero-scene" data-scene="metar" aria-hidden="true"><canvas></canvas></div>
     <div class="form-header">
       <h1>METAR / TAF</h1>
       <div class="header-right">
@@ -2048,6 +2081,65 @@ async function generateMulti() {
   showResult(`Times: ${targets.map(t => t.timeStr + 'Z').join(', ')}`);
 }
 
+</script>
+
+<!-- Decorative hero backdrop (ascii-scenes.js, inlined to keep the app one file).
+     Pauses when scrolled out of view; static frame under prefers-reduced-motion. -->
+<script>
+/* ASCII / pixel backdrops for Read topics. Usage: <div data-scene="metar"><canvas></canvas></div> */
+(function(){
+  const hash=(x,y,s)=>{let h=(Math.imul(x,374761393)+Math.imul(y,668265263)+Math.imul(s,1442695041))|0;h=Math.imul(h^(h>>>13),1274126177);return((h^(h>>>16))>>>0)/4294967296;};
+  const noise=(x,y,s)=>{const xi=Math.floor(x),yi=Math.floor(y),fx=x-xi,fy=y-yi,u=fx*fx*(3-2*fx),v=fy*fy*(3-2*fy);
+    const a=hash(xi,yi,s),b=hash(xi+1,yi,s),c=hash(xi,yi+1,s),d=hash(xi+1,yi+1,s);return a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v;};
+  const fbm=(x,y,s)=>{let t=0,a=.5,f=1;for(let i=0;i<4;i++){t+=a*noise(x*f,y*f,s+i);f*=2;a*=.5;}return t/.9375;};
+  const sm=(e0,e1,x)=>{const t=Math.max(0,Math.min(1,(x-e0)/(e1-e0)));return t*t*(3-2*t);};
+  const TAU=Math.PI*2;
+
+  // weather-radar reflectivity ramp: light rain -> heavy cell
+  const RAMP=[[0,[120,178,132]],[.35,[176,204,104]],[.55,[232,200,92]],[.75,[228,140,70]],[1,[196,70,60]]];
+  const radar=i=>{for(let k=1;k<RAMP.length;k++){if(i<=RAMP[k][0]){const[a,ca]=RAMP[k-1],[b,cb]=RAMP[k],t=(i-a)/(b-a);
+    return ca.map((v,j)=>Math.round(v+(cb[j]-v)*t));}}return RAMP[RAMP.length-1][1];};
+  const CLOUD=' .:-=+*#%';
+
+  const SCENES={
+    metar(ctx,w,h,t,cell,font){
+      const g=ctx.createLinearGradient(0,0,0,h);
+      g.addColorStop(0,'#d9e1e8');g.addColorStop(.6,'#eef0f0');g.addColorStop(1,'#f6f5f1');
+      ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
+      ctx.font=`${cell*1.1}px ${font}`;ctx.textBaseline='middle';ctx.textAlign='center';
+      const cols=Math.ceil(w/cell),rows=Math.ceil(h/cell);
+      for(let r=0;r<rows;r++){
+        const vy=1-Math.min(1,Math.abs(r/rows-.4)*1.5);
+        for(let c=0;c<cols;c++){
+          const px=c*cell,py=r*cell,cx=px+cell/2,cy=py+cell/2;
+          const nx=c*.05,ny=r*.085;
+          const d=fbm(nx+t*.03,ny+t*.005,1)*.72+vy*.34;
+          const cloud=sm(.52,.82,d);
+          const rain=cloud*sm(.5,.76,fbm(nx*1.5+t*.045,ny*1.5,9))*1.35;
+          if(rain>.1){const[cr,cg,cb]=radar(Math.min(1,rain));
+            ctx.fillStyle=`rgba(${cr},${cg},${cb},.55)`;ctx.fillRect(px+1,py+1,cell-2,cell-2);}
+          if(cloud>.05){ctx.fillStyle=`rgba(28,25,22,${(.2+.6*cloud).toFixed(3)})`;
+            ctx.fillText(CLOUD[Math.min(CLOUD.length-1,1+Math.floor(cloud*(CLOUD.length-1)))],cx,cy);}
+        }
+      }
+    }
+  };
+
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const font=(getComputedStyle(document.documentElement).getPropertyValue('--mono')||'monospace').trim()||'monospace';
+  document.querySelectorAll('[data-scene]').forEach(stage=>{
+    const scene=SCENES[stage.dataset.scene];const cv=stage.querySelector('canvas');if(!scene||!cv)return;
+    const ctx=cv.getContext('2d');let w=0,h=0,raf=0,last=0,t=40,on=false;const cell=11,FPS=1000/14;
+    const size=()=>{const r=stage.getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1);w=r.width;h=r.height;
+      if(!w||!h)return false;cv.width=w*dpr;cv.height=h*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);return true;};
+    const draw=()=>{if(w&&h)scene(ctx,w,h,t,cell,font);};
+    const loop=now=>{raf=requestAnimationFrame(loop);if(now-last<FPS)return;t+=(now-last||FPS)/1000;last=now;draw();};
+    const start=()=>{if(on||reduce)return;on=true;last=performance.now();raf=requestAnimationFrame(loop);};
+    const stop=()=>{on=false;cancelAnimationFrame(raf);};
+    new ResizeObserver(()=>{if(size())draw();}).observe(stage);
+    new IntersectionObserver(es=>es.forEach(e=>e.isIntersecting?start():stop())).observe(stage);
+  });
+})();
 </script>
 </body>
 </html>
