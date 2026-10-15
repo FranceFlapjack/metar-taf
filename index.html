@@ -75,8 +75,7 @@ body {
 
 /* ── Form section ────────────────────────────────────────────────────────── */
 #form-panel {
-  position: relative;
-  isolation: isolate;          /* keeps the scene's z-index:-1 inside this panel */
+  position: relative;          /* anchors the scene on phones; z-index:-1 puts it under all page content */
   padding: 64px 0 52px;
   border-bottom: 1px solid var(--border);
 }
@@ -90,6 +89,9 @@ body {
   z-index: -1;
   pointer-events: none;
   overflow: hidden;
+  /* Soft bottom edge instead of a hard cut where the header ends. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 65%, transparent);
+          mask-image: linear-gradient(to bottom, #000 65%, transparent);
 }
 .hero-scene canvas { display: block; width: 100%; height: 100%; }
 /* Left-to-right fade so the title, clock and inputs stay readable. */
@@ -105,7 +107,7 @@ body {
   text-shadow: 0 0 2px var(--bg), 0 0 4px var(--bg), 0 0 8px var(--bg);
 }
 /* Narrow screens: the column is the whole width, so tone the scene down. */
-@media (max-width: 700px) { .hero-scene canvas { opacity: .45; } }
+@media (max-width: 700px) { .hero-scene canvas { opacity: .3; } }
 /* The scene paints a light sky; in dark mode invert it (hue-rotate keeps
    the radar colours roughly the same hue) so it doesn't glare. */
 [data-theme="dark"] .hero-scene canvas { filter: invert(1) hue-rotate(180deg) brightness(.8); }
@@ -2112,9 +2114,13 @@ async function generateMulti() {
         const vy=1-Math.min(1,Math.abs(r/rows-.4)*1.5);
         for(let c=0;c<cols;c++){
           const px=c*cell,py=r*cell,cx=px+cell/2,cy=py+cell/2;
-          const nx=c*.05,ny=r*.085;
-          const d=fbm(nx+t*.03,ny+t*.005,1)*.72+vy*.34;
-          const cloud=sm(.52,.82,d);
+          // Tuned for the app: lower frequency + higher threshold = separate cells with
+          // clear sky between; weak horizon band so clouds spread over the whole view.
+          // Phones keep the original settings: the small header would often sit between cells.
+          const wide=w>=700;
+          const nx=c*(wide?.032:.05),ny=r*(wide?.055:.085);
+          const d=wide?fbm(nx+t*.03,ny+t*.005,1)*.85+vy*.1:fbm(nx+t*.03,ny+t*.005,1)*.72+vy*.34;
+          const cloud=wide?sm(.56,.74,d):sm(.52,.82,d);
           const rain=cloud*sm(.5,.76,fbm(nx*1.5+t*.045,ny*1.5,9))*1.35;
           if(rain>.1){const[cr,cg,cb]=radar(Math.min(1,rain));
             ctx.fillStyle=`rgba(${cr},${cg},${cb},.55)`;ctx.fillRect(px+1,py+1,cell-2,cell-2);}
