@@ -7,16 +7,16 @@
 
 <!-- Open Graph -->
 <meta property="og:type"        content="website">
-<meta property="og:url"         content="https://FranceFlapjack.github.io/metar-taf">
+<meta property="og:url"         content="https://metar-th.vercel.app">
 <meta property="og:title"       content="METAR/TAF Weather Briefing">
 <meta property="og:description" content="Live METAR and TAF for northern Thailand aerodromes">
-<meta property="og:image"       content="https://FranceFlapjack.github.io/metar-taf/preview.png">
+<meta property="og:image"       content="https://metar-th.vercel.app/preview.png">
 
 <!-- Twitter / iMessage fallback -->
 <meta name="twitter:card"        content="summary">
 <meta name="twitter:title"       content="METAR/TAF Weather Briefing">
 <meta name="twitter:description" content="Live METAR and TAF for northern Thailand aerodromes">
-<meta name="twitter:image"       content="https://FranceFlapjack.github.io/metar-taf/preview.png">
+<meta name="twitter:image"       content="https://metar-th.vercel.app/preview.png">
 <style>
 /* ── Theme variables ─────────────────────────────────────────────────────── */
 :root {
@@ -1136,8 +1136,11 @@ const PROXY_PREF_KEY   = 'proxyPref';
 function orderedProxies() {
   let pref = null;
   try { pref = localStorage.getItem(PROXY_PREF_KEY); } catch (_) {}
-  const hit = pref && PROXIES.find(p => p.prefix === pref);
-  return hit ? [hit, ...PROXIES.filter(p => p !== hit)] : PROXIES.slice();
+  // Our own proxy always goes first: a cold start can lose one race to a
+  // public proxy, which must not then stay preferred.
+  const [own, ...rest] = PROXIES;
+  const hit = pref && rest.find(p => p.prefix === pref);
+  return hit ? [own, hit, ...rest.filter(p => p !== hit)] : PROXIES.slice();
 }
 
 async function tryProxy(proxy, apiUrl, expect) {

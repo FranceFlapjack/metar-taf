@@ -6,14 +6,18 @@ is deliberately left online and untouched between roadmap pushes.
 ## Done
 
 - **2026-10-26 — Own proxy + Thai SPECI/COR from TMD**: Vercel project
-  `metar-th` → https://metar-th.vercel.app (code in `proxy/`, region sin1, account franceflapjack).
+  `metar-th` → https://metar-th.vercel.app (`api/` folder, region sin1, account franceflapjack).
   `/api/proxy` = CORS proxy allowlisted to aviationweather.gov, first in
   PROXIES. `/api/tmd` = latest METAR/SPECI per station scraped from TMD
   nsWEBPIB (Thai SPECI/COR never reach NOAA/Ogimet), merged into the METAR
   list; a COR replaces the report it corrects. nsWEBPIB keeps only the newest
   report per station, so a SPECI replaced before Generate is gone. Both
-  endpoints answer only github.io + localhost origins. Deploy: `cd proxy &&
-  npx vercel deploy --prod`; check: `node proxy/test/check.js --live`.
+  endpoints answer only github.io + localhost origins. Check: `node tests/check.js --live`.
+- **2026-10-26 — App moved to Vercel**: the app itself is now served from
+  https://metar-th.vercel.app (same project as the proxy, so `/api/*` is
+  same-origin; `.vercelignore` publishes only index.html + api/). The own
+  proxy is always tried first, so a cold start can't leave a public proxy
+  preferred. Deploy: `npx vercel deploy --prod` from the repo root.
 - **2026-10-13 — Audit fixes**: SIGMET feed is separated by `-----` lines,
   not blank lines, so the whole worldwide feed (1,100+ lines) was shown
   whenever a Thai SIGMET was active — now split correctly. A failed SIGMET
@@ -96,7 +100,7 @@ is deliberately left online and untouched between roadmap pushes.
       target. Own Vercel proxy added 2026-10-26 (see Done).
 - [ ] **TMD nsWEBPIB**: nsweb.tmd.go.th serves no intermediate cert; the
       proxy embeds Let's Encrypt YR2 (expires 2028-09-02) + Root YR in
-      `proxy/api/_lib.js`. If `/api/tmd` starts returning 502, curl it: a cert
+      `api/_lib.js`. If `/api/tmd` starts returning 502, curl it: a cert
       error means TMD moved to a new intermediate (add its PEM); "no reports
       found" means the page layout changed (fix `extractReports`).
 - [ ] Watch for aviationweather.gov API changes — both the SIGMET and TAF

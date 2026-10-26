@@ -77,17 +77,21 @@ yDFx8r7i9vIJU5HS3moZLkYWAOilMaV9N56A9Bgb6dNcHkvg3NoaYA==
 `;
 const CA = [...tls.rootCertificates, LE_YR2.trim(), LE_ROOT_YR.trim()];
 
-// Browsers send the Origin host lowercase.
+// Browsers send the Origin host lowercase. github.io stays until Pages is off.
 function allowedOrigin(origin) {
-  return origin === 'https://franceflapjack.github.io' ||
+  return origin === 'https://metar-th.vercel.app' ||
+         origin === 'https://franceflapjack.github.io' ||
          /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin || '');
 }
 
 // Sets CORS headers. Returns false (after answering 403) for other origins.
+// No Origin = the app's own same-origin GET (or a non-browser client); pages on
+// other sites always send one, and the target allowlist still applies.
 function cors(req, res) {
   const origin = req.headers.origin;
   res.setHeader('Vary', 'Origin');
   res.setHeader('Cache-Control', 'no-store');
+  if (!origin) return true;
   if (!allowedOrigin(origin)) { res.status(403).send('forbidden origin'); return false; }
   res.setHeader('Access-Control-Allow-Origin', origin);
   return true;

@@ -2,7 +2,7 @@
 
 Web app for fetching live METAR and TAF data for northern Thailand aerodromes (VTPO VTPP VTCL VTCN VTCP), styled in TMD colour format.
 
-**Live demo:** https://FranceFlapjack.github.io/metar-taf
+**Live demo:** https://metar-th.vercel.app
 
 ---
 

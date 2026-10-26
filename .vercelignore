@@ -1,0 +1,6 @@
+# Only the app (index.html) and api/ are published.
+*.md
+tests.html
+tests
+.nojekyll
+.gitignore
