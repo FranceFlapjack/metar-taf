@@ -6,7 +6,7 @@ is deliberately left online and untouched between roadmap pushes.
 ## Done
 
 - **2026-10-26 — Own proxy + Thai SPECI/COR from TMD**: Vercel project
-  `metar-taf-proxy` (code in `proxy/`, region sin1, account franceflapjack).
+  `metar-th` → https://metar-th.vercel.app (code in `proxy/`, region sin1, account franceflapjack).
   `/api/proxy` = CORS proxy allowlisted to aviationweather.gov, first in
   PROXIES. `/api/tmd` = latest METAR/SPECI per station scraped from TMD
   nsWEBPIB (Thai SPECI/COR never reach NOAA/Ogimet), merged into the METAR

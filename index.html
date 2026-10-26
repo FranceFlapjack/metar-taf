@@ -1121,7 +1121,7 @@ document.getElementById('zulu').addEventListener('input', validateTime);
 // (they fail fast, so they cost almost nothing). Keep at least 3 live entries.
 // The first is our own Vercel function (proxy/ folder), allowlisted to
 // aviationweather.gov and to this site's origin.
-const VERCEL_BASE = 'https://metar-taf-proxy.vercel.app';
+const VERCEL_BASE = 'https://metar-th.vercel.app';
 const PROXIES = [
   { prefix: VERCEL_BASE + '/api/proxy?url=',                 encode: true  },
   { prefix: 'https://allorigins.hexlet.app/raw?url=',        encode: true  },
