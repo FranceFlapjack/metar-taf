@@ -1,0 +1,278 @@
+<script>var regions="";</script>
+<h1>METAR - Meteorological Aerodrome Report</h1>
+<!-- Compiled at ' . $site_description . '  <br />-->
+
+<strong>Date:</strong> 2026-10-26<strong style="margin-left:12px;">Time:</strong> 07:18:18
+<hr />
+
+<div class="opmet-search">
+	<label for="icaos">Query METARs</label>
+	<img src="images/search_16x16.png" 
+		title="Click here to search by name" class="searchIcao">
+	<input type="text" name="icaos" id="icaos" style="text-transform:uppercase"/>
+
+	<br class="clear"> 
+
+	<button onclick="window.submitQuerytafmetar()">
+	 	Search	</button>
+
+	<select class="right" id="refresh-rate">
+		<option value="1">1 min</option>
+		<option value="2">2 min</option>
+		<option value="3">3 min</option>
+		<option value="4">4 min</option>
+		<option value="5" selected>5 min</option>
+	</select>
+	
+	<label style="position: relative; top: 13px; width: 40%; padding-right: 5px;" class="right" 
+		for="refresh-rate">
+		Refresh this page every&nbsp;
+	</label>
+	<div style="clear:both;"></div>
+</div>
+
+<div class="result query-container" style="padding-bottom: 10px;" data-index="0">
+		<h2>Domestic (Thai)<a href='#' id='view-colour' data-type='Domestic (Thai)' data-extra='long' class='colour-selection'>Colour Coded</a></h2><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTBS', 'SA', 't'); return false;">View Decoded</a>METAR VTBS 260700Z 09005KT 040V160 9999 FEW020 34/23 Q1010 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTBD', 'SA', 't'); return false;">View Decoded</a>METAR VTBD 260700Z 08005KT 340V140 9999 FEW020 34/23 Q1010 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTBU', 'SA', 't'); return false;">View Decoded</a>METAR VTBU 260700Z 16009KT 9999 FEW020 32/28 Q1010 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTCC', 'SA', 't'); return false;">View Decoded</a><span class="speci-amd-cor">SPECI VTCC 260702Z 09010KT 9000 3500SE -TSRA FEW018 FEW025CB BKN032 26/24 Q1013 TEMPO 4000 TSRA=</span></div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTCT', 'SA', 't'); return false;">View Decoded</a>METAR VTCT 260700Z 19008KT 160V230 9999 VCSH FEW018TCU BKN025 28/23 Q1014 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTSP', 'SA', 't'); return false;">View Decoded</a>METAR VTSP 260700Z 23005KT 200V260 9999 -RA FEW010 FEW018TCU SCT020 27/25 Q1009 TEMPO FM0720 TL0735 4000 RA=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTSG', 'SA', 't'); return false;">View Decoded</a>METAR VTSG 260700Z 31010KT 9999 VCSH FEW010 BKN017 26/24 Q1010 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTSS', 'SA', 't'); return false;">View Decoded</a>METAR VTSS 260700Z 20007KT 160V230 9999 SCT020 BKN100 28/24 Q1009 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTST', 'SA', 't'); return false;">View Decoded</a>METAR VTST 260700Z 25004KT 210V320 9999 -RA SCT020 27/27 Q1009 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTSB', 'SA', 't'); return false;">View Decoded</a>METAR VTSB 260700Z VRB02KT 9000 -RA SCT010 BKN020 BKN100 27/27 Q1009 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTSC', 'SA', 't'); return false;">View Decoded</a>METAR VTSC 260700Z 35004KT 310V020 9999 FEW020 SCT100 27/23 Q1010 RERA NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTSE', 'SA', 't'); return false;">View Decoded</a>METAR VTSE 260700Z 08006KT 9999 FEW020 30/26 Q1009 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTSF', 'SA', 't'); return false;">View Decoded</a>METAR VTSF 260700Z 04006KT 9999 -RA SCT018 28/26 Q1010 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTSM', 'SA', 't'); return false;">View Decoded</a>METAR VTSM 260700Z 14006KT 9999 -RA SCT020 26/25 Q1011 RERA NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTSR', 'SA', 't'); return false;">View Decoded</a>METAR VTSR 260700Z VRB02KT 9999 VCSH BKN020 31/26 Q1009 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTSY', 'SA', 't'); return false;">View Decoded</a>METAR VTSY 260700Z 19007KT 150V230 9999 SCT030 30/23 Q1011 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTCH', 'SA', 't'); return false;">View Decoded</a>METAR VTCH 260700Z 17004KT 080V240 9999 FEW020CB SCT025 32/24 Q1012 TEMPO 4000 TSRA=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTCL', 'SA', 't'); return false;">View Decoded</a>METAR VTCL 260700Z VRB02KT 9999 FEW020 BKN070 27/25 Q1013 RETSRA NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTCN', 'SA', 't'); return false;">View Decoded</a>METAR VTCN 260700Z 02006KT 340V050 9999 FEW025 29/25 Q1013 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTCP', 'SA', 't'); return false;">View Decoded</a>METAR VTCP 260700Z VRB03KT 9999 VCSH BKN016 30/25 Q1012 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTPB', 'SA', 't'); return false;">View Decoded</a>METAR VTPB 260700Z VRB01KT 9999 SCT025 33/23 Q1011 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTPM', 'SA', 't'); return false;">View Decoded</a>METAR VTPM 260700Z 03006KT 360V080 9999 SCT030 SCT080 32/24 Q1010 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTPO', 'SA', 't'); return false;">View Decoded</a>METAR VTPO 260700Z 28004KT 9999 FEW012 SCT025 BKN100 28/27 Q1012 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTPP', 'SA', 't'); return false;">View Decoded</a>METAR VTPP 260700Z 28004KT 230V320 9999 FEW020 SCT100 30/25 Q1011 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTUD', 'SA', 't'); return false;">View Decoded</a>METAR VTUD 260700Z 09008KT 040V130 9999 SCT042 33/22 Q1012 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTUI', 'SA', 't'); return false;">View Decoded</a>METAR VTUI 260700Z 12006KT 080V150 9999 BKN030 33/25 Q1012 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTUK', 'SA', 't'); return false;">View Decoded</a>METAR VTUK 260700Z 09004KT 060V140 9999 BKN030 32/22 Q1013 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTUL', 'SA', 't'); return false;">View Decoded</a>METAR VTUL 260700Z VRB03KT 9999 BKN030 31/24 Q1013 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTUO', 'SA', 't'); return false;">View Decoded</a>METAR VTUO 260700Z 06006KT 020V090 9999 BKN030 32/23 Q1012 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTUQ', 'SA', 't'); return false;">View Decoded</a>METAR VTUQ 260700Z 07003KT 020V140 9999 BKN025 34/21 Q1011 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTUU', 'SA', 't'); return false;">View Decoded</a>METAR VTUU 260700Z 19004KT 110V250 9999 SCT040 34/24 Q1011 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTUV', 'SA', 't'); return false;">View Decoded</a>METAR VTUV 260700Z 10007KT 070V140 9999 SCT035 32/22 Q1012 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTUW', 'SA', 't'); return false;">View Decoded</a>METAR VTUW 260700Z 12008KT 090V150 9999 FEW030 34/24 Q1012 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTBO', 'SA', 't'); return false;">View Decoded</a>METAR VTBO 260700Z 23009KT 9999 VCSH FEW018CB SCT020 32/24 Q1010=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VTPH', 'SA', 't'); return false;">View Decoded</a>METAR VTPH 260700Z 13006KT 080V180 9999 FEW030 33/26 Q1010 NOSIG=</div></pre></div><div class="result query-container" style="padding-bottom: 10px;" data-index="1">
+		<h2>ASIA<a href='#' id='view-colour' data-type='ASIA' data-extra='long' class='colour-selection'>Colour Coded</a></h2><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VLVT', 'SA', 't'); return false;">View Decoded</a>METAR VLVT 260700Z 18004KT 8000 SCT020 33/27 Q1012 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VVTS', 'SA', 't'); return false;">View Decoded</a>METAR VVTS 260700Z 13005KT 050V170 9999 SCT017 34/20 Q1010 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VVNB', 'SA', 't'); return false;">View Decoded</a>METAR VVNB 260700Z 19006KT 150V220 9999 BKN033 30/25 Q1014 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VVDN', 'SA', 't'); return false;">View Decoded</a>METAR VVDN 260700Z 12005KT 060V170 CAVOK 31/24 Q1013 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('WSSS', 'SA', 't'); return false;">View Decoded</a>METAR WSSS 260700Z 18006KT 9999 FEW020 BKN160 31/21 Q1010 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('WMKK', 'SA', 't'); return false;">View Decoded</a>METAR WMKK 260700Z VRB03KT 9000 SCT018 31/24 Q1009 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('WIII', 'SA', 't'); return false;">View Decoded</a>METAR WIII 260700Z 34010KT 310V020 8000 FEW020 34/23 Q1009 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('WBSB', 'SA', 't'); return false;">View Decoded</a>METAR WBSB 260700Z 36007KT 9999 FEW016 BKN300 31/25 Q1010 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VYYY', 'SA', 't'); return false;">View Decoded</a>METAR VYYY 260700Z 20003KT 7000 BKN020 FEW025TCU BKN110 33/28 Q1010 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VGHS', 'SA', 't'); return false;">View Decoded</a>METAR VGHS 260700Z 03005KT 5000 HZ FEW015 35/20 Q1011 NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('VHHH', 'SA', 't'); return false;">View Decoded</a>METAR VHHH 260700Z 30008KT 9999 FEW028 SCT040 30/21 Q1015 WS R25L NOSIG=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('RCTP', 'SA', 't'); return false;">View Decoded</a>METAR RCTP 260700Z 04014KT 9999 FEW010 SCT020 BKN035 25/22 Q1017 NOSIG RMK A3005=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('RCKH', 'SA', 't'); return false;">View Decoded</a>METAR RCKH 260700Z 27013KT 230V300 9999 FEW016 SCT024 31/22 Q1013 NOSIG RMK 28011KT/R09 A2994=</div></pre><pre><div class="js-metar"><a href="pages/popup/view_station.php" 
+						class="view-decoded"
+						onclick="window.viewStation('RPLL', 'SA', 't'); return false;">View Decoded</a>METAR RPLL 260700Z 13008KT 090V170 9999 FEW025 34/23 Q1011 NOSIG RMK A2985=</div></pre></div>
+<script>
+	$(document).ready(function() {
+		bindEvents();
+	});
+	window.submitQuerytafmetar = function() {
+		window.showOPMETQuery($("#icaos").val().toUpperCase(), 'metar');
+	};
+
+	window.fillMenu('default');
+	document.title = "nsWEBPIB - METAR";
+	$("#icaos").keypress(function(e) {
+		if (e.which == 13) {
+			window.submitQuerytafmetar(); 
+		}
+	});
+
+	$("pre").mouseenter(function(e) {
+		$(this).children(".singleresultopts").show();
+	});
+
+	$("pre").mouseleave(function(e) {
+		$(this).children(".singleresultopts").hide();
+	});
+
+	$("#divTR_InlineStrings").html("");
+	$('.searchIcao').on('click', function () {
+		showStationSearch('icaos');
+	});
+
+	window.showStationSearch = function(id) {
+		$.facebox.settings.opacity = 0.2;
+		$.facebox({ ajax: 'pages/popup/station_search.php?field=' + id });
+	};
+	/* 
+	 * Get the interval time set by globalTimer in milliseconds 
+	 * and convert it to minutes
+	 */
+	var time = globalTimer.GetInterval() / 1000 / 60,
+	/*
+	 * Select the dropdown option which value corespondes to 
+	 * the minute interval set bu globalTimer
+	 */
+	$option = $('#refresh-rate option[value="' + time + '"]');
+	/*
+	 * Checks if any element was retrieved matching the value of 
+	 * the globalTimer interval
+	 */
+	if ($option.length > 0) {
+		// If an option is found select it
+		$option.prop('selected', true);
+	} else {
+		// If no option is found select the default option
+		time = $('#refresh-rate').find(':selected').val() * 60 * 1000;
+		// Set the interval of globalTimer to the default interval
+		globalTimer.setInterval(time);
+	}
+	// Set the function to be used by globalTimer
+	globalTimer.setFunction(window.showMetars);
+	globalTimer.setFunctionParam(encodeURIComponent(regions));
+	globalTimer.startTimer();
+	// When a new interval is selected
+	$("#refresh-rate").on('change', function () {
+		// Convert selected interval from minutes to milliseconds
+		var interval = parseInt($(this).val()) * 60 * 1000;
+		// Set the new interval on globalTimer
+		globalTimer.setInterval(interval);
+		// Update the timer with the new values
+		globalTimer.updateTimer();
+	});
+	var legend_array = [];
+	$(".query-container").each(function() {
+		legend_array.push(false);
+	});
+	function bindEvents() {
+		$("a#view-colour").each(function() {
+			$(this).off("click");
+			$(this).on("click", function(e) {
+				e.preventDefault();
+				$this = $(this);
+				var icao = $("#icaos").val();
+				var type = 'metar';
+				var extra = '';
+				var region = $this.attr('data-type');
+				window.showSingleOPMETQuery(icao, type, true, extra,function(res){
+					$this.parents('.query-container').html(res);
+					bindEvents();
+				}, region); 
+			});
+		});
+		$("a#remove-colour").each(function() {
+			$(this).off("click");
+			$(this).on("click", function(e) {
+				e.preventDefault();
+				$this = $(this);
+				var icao = $("#icaos").val();
+				var type = 'metar';
+				var extra = '';
+				var region = $this.attr('data-type');
+				window.showSingleOPMETQuery(icao, type, false, extra,function(res){
+					$this.parents('.query-container').html(res);
+					bindEvents();
+				}, region); 
+			});
+		});
+		$("div#legenddiv").each(function() {
+			var legend_index = parseInt($(this).parents(".query-container").attr("data-index"));
+			$(this).off("click");
+			$(this).on("click", function() {
+				var legendtable = $(this).parents(".query-container").find("div#legendtable");
+				if (legend_array[legend_index]) {
+					legendtable.each(function() {
+						$(this).fadeOut(100);
+					});
+					legend_array[legend_index] = false;
+				} else {
+					legendtable.each(function() {
+						$(this).fadeIn(500);
+						$(this).off("click");
+						$(this).on("click", function() {
+							legendtable.each(function() {
+								$(this).fadeOut(100);
+							})
+							legend_array[legend_index] = false;
+						});
+						legend_array[legend_index] = true;
+					});
+				}
+			});
+			/*$(this).hover(
+				function(){
+					$(this).parents(".query-container").find("div#legendtable").each(function() {
+						$(this).fadeIn(500);
+					});
+				},
+				function(){
+					$(this).parents(".query-container").find("div#legendtable").each(function() {
+						$(this).fadeOut(100);
+					});
+				}
+			);*/
+		});
+	}
+</script>
+

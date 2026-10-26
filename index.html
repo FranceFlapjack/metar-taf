@@ -714,7 +714,7 @@ body {
     <div id="taf-source-note">TAF shown is the most recently issued. Historical TAFs are not available from this source.</div>
     <div id="taf-rows"></div>
     <div class="section-gap"></div>
-    <div id="data-source-note">Showing METAR, SPECI, and TAF — SIGMET checked separately</div>
+    <div id="data-source-note">Showing METAR, SPECI, and TAF — latest Thai SPECI/COR added from TMD nsWEBPIB — SIGMET checked separately</div>
     <div id="sigmet-section"></div>
 
     <div id="print-footer">
@@ -1119,7 +1119,11 @@ document.getElementById('zulu').addEventListener('input', validateTime);
 // timeout cascade.  Health checked 2026-10-13 from a browser: only hexlet and
 // corsfix answered; cors.eu.org and cors.lol failed but are kept as fallbacks
 // (they fail fast, so they cost almost nothing). Keep at least 3 live entries.
+// The first is our own Vercel function (proxy/ folder), allowlisted to
+// aviationweather.gov and to this site's origin.
+const VERCEL_BASE = 'https://metar-taf-proxy.vercel.app';
 const PROXIES = [
+  { prefix: VERCEL_BASE + '/api/proxy?url=',                 encode: true  },
   { prefix: 'https://allorigins.hexlet.app/raw?url=',        encode: true  },
   { prefix: 'https://proxy.corsfix.com/?',                   encode: false },
   { prefix: 'https://cors.eu.org/',                          encode: false },
@@ -1562,18 +1566,28 @@ function toggleDecode() {
 // ── Parse all METARs from raw text (no filtering) ─────────────────────────
 function parseAllMetarsText(text) {
   const all = {};
-  for (const rawLine of text.split('\n')) {
-    const stripped = rawLine.trim();
-    if (!stripped) continue;
-    if (/^(METAR|SPECI) /.test(stripped)) {
-      const parts = stripped.split(/\s+/);
-      if (parts.length >= 3) {
-        const icao = parts[1];
-        (all[icao] = all[icao] || []).push(stripped);
-      }
-    }
-  }
+  for (const rawLine of text.split('\n')) addMetar(all, rawLine);
   return all;
+}
+
+// Station and time group, skipping COR: "METAR COR VTBS 260700Z …".
+function metarIdent(report) {
+  const p = report.split(' ');
+  const i = p[1] === 'COR' ? 2 : 1;
+  return { icao: p[i], key: p[0] + ' ' + p[i + 1], cor: i === 2 };
+}
+
+// Adds one report line. The same report from NOAA and TMD (TMD keeps the
+// trailing "=") counts once, and a COR replaces the report it corrects.
+function addMetar(all, line) {
+  const report = line.trim().replace(/\s*=$/, '').replace(/\s+/g, ' ');
+  if (!/^(METAR|SPECI) /.test(report)) return;
+  const id = metarIdent(report);
+  if (!id.icao || !/^\d{6}Z$/.test(id.key.split(' ')[1] || '')) return;
+  const list = all[id.icao] = all[id.icao] || [];
+  const i = list.findIndex(r => metarIdent(r).key === id.key);
+  if (i < 0) list.push(report);
+  else if (id.cor && !metarIdent(list[i]).cor) list[i] = report;
 }
 
 // ── Attach badge tooltip listeners (shared helper) ────────────────────────
@@ -1839,15 +1853,16 @@ async function fetchBriefing(stationList, hoursBack) {
   const ids = encodeURIComponent(stationList.join(','));
   btn.disabled = true;
   hideResult();
-  setStatus('loading', 'Fetching data from aviationweather.gov…');
+  setStatus('loading', 'Fetching data from aviationweather.gov and TMD…');
 
   // No `hours` on the TAF endpoint — upstream rejects it with HTTP 400
   // ('Unexpected query parameter provided'). It bought nothing anyway: this
   // endpoint only ever returns the current TAF per station.
-  const [metarRaw, tafRaw, sigmetLines] = await Promise.all([
+  const [metarRaw, tafRaw, sigmetLines, tmdRaw] = await Promise.all([
     fetchViaProxy(`https://aviationweather.gov/api/data/metar?ids=${ids}&hours=${hoursBack}&sep=true&format=raw`, /^(METAR|SPECI) /m),
     fetchViaProxy(`https://aviationweather.gov/api/data/taf?ids=${ids}&format=raw`, /^TAF /m),
     fetchSigmet(),
+    fetchTmdLatest(stationList),
   ]);
 
   btn.disabled = false;
@@ -1856,12 +1871,29 @@ async function fetchBriefing(stationList, hoursBack) {
     return null;
   }
   return {
-    allMetars: metarRaw ? parseAllMetarsText(metarRaw) : {},
+    allMetars: mergeTmd(metarRaw ? parseAllMetarsText(metarRaw) : {}, tmdRaw, stationList),
     tafs:      tafRaw   ? parseTafText(tafRaw)         : {},
     metarFailed: metarRaw === null,
     tafFailed:   tafRaw === null,
     sigmetLines,
   };
+}
+
+// TMD's nsWEBPIB has Thai SPECI/COR that never reach aviationweather.gov, but
+// only the newest report per station. Resolves '' on failure: it only adds to
+// NOAA's data, so a TMD outage must not read as a failed METAR fetch.
+async function fetchTmdLatest(stationList) {
+  if (!stationList.some(s => s.startsWith('VT'))) return '';
+  try {
+    const resp = await fetch(VERCEL_BASE + '/api/tmd', { signal: AbortSignal.timeout(PROXY_TIMEOUT_MS) });
+    return resp.ok ? await resp.text() : '';
+  } catch (_) { return ''; }
+}
+
+function mergeTmd(allMetars, tmdRaw, stationList) {
+  for (const line of (tmdRaw || '').split('\n'))
+    if (stationList.includes(metarIdent(line.trim()).icao)) addMetar(allMetars, line);
+  return allMetars;
 }
 
 // "No data" must not hide a failed fetch: the station may well have reports.

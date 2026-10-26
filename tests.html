@@ -69,6 +69,23 @@ document.getElementById('app').addEventListener('load', function () {
   check('Thai block has no foreign text', /WAAF|SEFG/.test(th[0] || ''), false);
   check('no Thai SIGMET → empty list', w.thaiSigmets('Hazard: VA\nWAAF SIGMET 03\n---------\n'), []);
 
+  // METAR parsing and the TMD merge
+  check('METAR COR keyed by station',
+    Object.keys(w.parseAllMetarsText('METAR COR VTBS 260700Z 09005KT 9999 FEW020 34/23 Q1010')), ['VTBS']);
+  const noaa = 'METAR VTCC 260700Z 09011KT 9000 FEW018 26/24 Q1013\nMETAR VTPP 260400Z 28004KT 9999 FEW020 30/25 Q1011';
+  const tmd  = 'METAR VTCC 260700Z 09011KT 9000 FEW018 26/24 Q1013\n' +       // same as NOAA
+               'SPECI VTCC 260702Z 09010KT 9000 -TSRA FEW025CB 26/24 Q1013\n' + // NOAA missed it
+               'METAR COR VTPP 260400Z 28004KT 9999 FEW020 30/24 Q1011\n' +     // corrects NOAA's
+               'METAR WSSS 260700Z 18006KT 9999 FEW020 31/21 Q1010';            // not requested
+  const merged = w.mergeTmd(w.parseAllMetarsText(noaa), tmd, ['VTCC', 'VTPP']);
+  check('identical report merged once, new SPECI added', merged.VTCC.map(r => r.split(' ')[2]), ['260700Z', '260702Z']);
+  check('COR replaces the original', merged.VTPP, ['METAR COR VTPP 260400Z 28004KT 9999 FEW020 30/24 Q1011']);
+  check('unrequested station ignored', merged.WSSS, undefined);
+  check('original does not replace a COR',
+    w.parseAllMetarsText('METAR COR VTPP 260400Z 30/24\nMETAR VTPP 260400Z 30/25').VTPP, ['METAR COR VTPP 260400Z 30/24']);
+  check('trailing = stripped', w.mergeTmd({}, 'SPECI VTPO 260010Z 00000KT 3000 BR=', ['VTPO']).VTPO, ['SPECI VTPO 260010Z 00000KT 3000 BR']);
+  check('TMD failure leaves NOAA data', w.mergeTmd(w.parseAllMetarsText(noaa), '', ['VTCC']).VTCC.length, 1);
+
   // Colouring
   const col = l => w.colorizeLine(l);
   check('VCSH coloured as weather', col('METAR VTCC 130900Z 9999 VCSH').includes('<span class="c-maroon">VCSH</span>'), true);
