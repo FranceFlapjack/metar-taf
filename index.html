@@ -1866,6 +1866,10 @@ async function fetchBriefing(stationList, hoursBack) {
   ]);
 
   btn.disabled = false;
+  const note = document.getElementById('data-source-note');
+  note.innerHTML = tmdRaw === null
+    ? 'Showing METAR, SPECI, and TAF — <span class="c-red">TMD check failed: latest Thai SPECI/COR may be missing</span> — SIGMET checked separately'
+    : 'Showing METAR, SPECI, and TAF — latest Thai SPECI/COR added from TMD nsWEBPIB — SIGMET checked separately';
   if (metarRaw === null && tafRaw === null) {
     showError('Could not fetch data — all proxies failed.');
     return null;
@@ -1880,14 +1884,14 @@ async function fetchBriefing(stationList, hoursBack) {
 }
 
 // TMD's nsWEBPIB has Thai SPECI/COR that never reach aviationweather.gov, but
-// only the newest report per station. Resolves '' on failure: it only adds to
-// NOAA's data, so a TMD outage must not read as a failed METAR fetch.
+// only the newest report per station. Resolves '' when no Thai station was
+// asked for and null on failure (shown in the source note, NOAA data stands).
 async function fetchTmdLatest(stationList) {
   if (!stationList.some(s => s.startsWith('VT'))) return '';
   try {
     const resp = await fetch(VERCEL_BASE + '/api/tmd', { signal: AbortSignal.timeout(PROXY_TIMEOUT_MS) });
-    return resp.ok ? await resp.text() : '';
-  } catch (_) { return ''; }
+    return resp.ok ? await resp.text() : null;
+  } catch (_) { return null; }
 }
 
 function mergeTmd(allMetars, tmdRaw, stationList) {

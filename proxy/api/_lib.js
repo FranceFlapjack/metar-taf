@@ -93,11 +93,12 @@ function cors(req, res) {
   return true;
 }
 
-// GET a URL as text with our CA list. No redirects are followed.
+// GET a URL as text with our CA list. No redirects are followed. Any 2xx is
+// success: aviationweather.gov answers 204 (empty) for e.g. an unknown ICAO.
 function getText(url, timeoutMs) {
   return new Promise((resolve, reject) => {
     const req = https.get(url, { ca: CA, headers: { 'User-Agent': 'metar-taf-briefing' } }, r => {
-      if (r.statusCode !== 200) { r.resume(); return reject(new Error('HTTP ' + r.statusCode)); }
+      if (r.statusCode < 200 || r.statusCode > 299) { r.resume(); return reject(new Error('HTTP ' + r.statusCode)); }
       r.setEncoding('utf8');
       let body = '';
       r.on('data', d => body += d);
